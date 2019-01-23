@@ -2,6 +2,9 @@ import {BCAbstractRobot, SPECS} from 'battlecode';
 import prophet from './prophet.js';
 import castle from './castle.js';
 import pilgrim from './pilgrim.js';
+import crusader from './crusader.js';
+import navigation from './navigation.js';
+
 
 
 // eslint-disable-next-line no-unused-vars
@@ -29,6 +32,7 @@ class MyRobot extends BCAbstractRobot {
                     break;
                 case SPECS.CRUSADER:
                     this.myType = crusader;
+                    break;
             }
         }
         return this.myType.takeTurn(this);
