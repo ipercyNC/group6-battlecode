@@ -1,0 +1,22 @@
+{
+  "extends": "airbnb-base",
+  "rules": {
+    "semi": 2,
+    quotes: ["error", "double"],
+    max-len: ["error", 10000],
+    "prefer-destructuring": "off",
+    prefer-template: "off",
+    no-underscore-dangle: "off",
+    class-methods-use-this: "off",
+    no-param-reassign: "off",
+    no-plusplus: "off",
+    'no-restricted-globals': ['error', 'isFinite', 'isNaN'],
+    operator-linebreak: off,
+    indent: ["error", 2, { "ignoredNodes": ["SwitchCase"] }],
+    curly: "error",
+    brace-style: "error",
+    no-console: ["error", { allow: ["warn", "info", "error"] }],
+    no-restricted-syntax: "off",
+    no-mixed-operators: "off",
+  }
+}

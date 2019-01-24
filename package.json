@@ -1,0 +1,16 @@
+{
+  "name": "group-6-battlecode",
+  "version": "0.0.1",
+  "description": "Bot for Battlecode Crusade.",
+  "scripts": {
+    "start": "bc19run -b bots -r bots"
+  },
+  "dependencies": {
+    "bc19": "^0.4.6"
+  },
+  "devDependencies": {
+    "eslint": "^5.12.1",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.15.0"
+  }
+}
