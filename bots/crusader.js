@@ -3,7 +3,6 @@ import navigation from "./navigation.js";
 
 const crusader = {};
 crusader.takeTurn = (self) => {
-
   // make directional choice - either given by castle? or enemy?
   const visible = self.getVisibleRobots();
 
@@ -12,6 +11,7 @@ crusader.takeTurn = (self) => {
     if (!self.isVisible(r)) {
       return false;
     }
+
     const dist = Math.pow((r.x - self.me.x), 2) + Math.pow((r.y - self.me.y), 2);
     if (r.team !== self.me.team &&
       SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist &&
@@ -23,8 +23,8 @@ crusader.takeTurn = (self) => {
   if (attackable.length > 0) {
     // attack first robot
     const r = attackable[0];
-    self.log("" + r);
-    self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
+    // self.log("" + r);
+    // self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
     return self.attack(r.x - self.me.x, r.y - self.me.y);
   }
 
@@ -32,7 +32,7 @@ crusader.takeTurn = (self) => {
   const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
   const choice = choices[Math.floor(Math.random() * choices.length)];
   const target = navigation.basicMove(self, choice);
-  self.log("trying to move to " + target);
+  // self.log("trying to move to " + target);
   return self.move(target[0], target[1]);
 };
 

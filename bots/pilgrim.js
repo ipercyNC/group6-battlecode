@@ -4,8 +4,6 @@ const pilgrim = {};
 
 pilgrim.takeTurn = (self) => {
 
-
-
 };
 
 export default pilgrim;

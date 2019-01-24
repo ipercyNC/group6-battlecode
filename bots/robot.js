@@ -26,13 +26,14 @@ class MyRobot extends BCAbstractRobot {
           this.myType = castle;
           break;
         case SPECS.PILGRIM:
+          this.log("TEST");
           this.myType = pilgrim;
           break;
         case SPECS.CRUSADER:
           this.myType = crusader;
           break;
         default:
-          this.me.log("Unknown unit type" + this.me.unit);
+          this.log("Unknown unit type" + this.me.unit);
       }
     }
     return this.myType.takeTurn(this);

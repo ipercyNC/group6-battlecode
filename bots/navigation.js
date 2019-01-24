@@ -1,8 +1,8 @@
 const navigation = {};
 
 navigation.dirMove = (self, destination) => {
-  self.log("destx " + destination[0] + "dy " + destination[1]);
-  self.log("selfx " + self.me.x + "selfy " + self.me.y);
+  // self.log("destx " + destination[0] + "dy " + destination[1]);
+  // self.log("selfx " + self.me.x + "selfy " + self.me.y);
   let dx = destination[0] - self.me.x;
   let dy = destination[1] - self.me.y;
   if (dx < 0) {
@@ -15,12 +15,12 @@ navigation.dirMove = (self, destination) => {
   } else {
     dy = 1;
   }
-  self.log("dx " + dx + "dy " + dy);
+  // self.log("dx " + dx + "dy " + dy);
   return [dx, dy];
 };
 
 navigation.basicMove = (self, destination) => {
-  self.log("destx " + destination[0] + "dy " + destination[1]);
+  // self.log("destx " + destination[0] + "dy " + destination[1]);
   return [destination[0], destination[1]];
 };
 
