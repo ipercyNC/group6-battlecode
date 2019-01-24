@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "description": "Bot for Battlecode Crusade.",
   "scripts": {
-    "start": "bc19run -b bots -r bots"
+    "start": "bc19run -b bots -r bots",
+    "help": "bc19run"
   },
   "dependencies": {
     "bc19": "^0.4.6"

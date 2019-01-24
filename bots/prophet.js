@@ -1,5 +1,5 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
-import navigation from "./navigation";
+import navigation from "./navigation.js";
 
 const prophet = {};
 

@@ -1,9 +1,9 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
-import prophet from "./prophet";
-import castle from "./castle";
-import pilgrim from "./pilgrim";
-import crusader from "./crusader";
-import navigation from "./navigation";
+import prophet from "./prophet.js";
+import castle from "./castle.js";
+import pilgrim from "./pilgrim.js";
+import crusader from "./crusader.js";
+import navigation from "./navigation.js";
 
 // eslint-disable-next-line no-unused-vars
 class MyRobot extends BCAbstractRobot {

@@ -18,5 +18,6 @@
     no-console: ["error", { allow: ["warn", "info", "error"] }],
     no-restricted-syntax: "off",
     no-mixed-operators: "off",
+    "import/extensions": "off"
   }
 }
