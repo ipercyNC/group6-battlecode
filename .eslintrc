@@ -23,5 +23,6 @@
     no-restricted-syntax: "off",
     no-mixed-operators: "off",
     "import/extensions": "off",
+    "arrow-body-style": ["error", "always"],
   }
 }
