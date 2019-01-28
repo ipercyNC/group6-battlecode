@@ -1,5 +1,9 @@
 {
+  "plugins": ["jest"],
   "extends": "airbnb-base",
+  env: {
+    "jest/globals": true
+  },
   "rules": {
     "semi": 2,
     quotes: ["error", "double"],
@@ -18,6 +22,6 @@
     no-console: ["error", { allow: ["warn", "info", "error"] }],
     no-restricted-syntax: "off",
     no-mixed-operators: "off",
-    "import/extensions": "off"
+    "import/extensions": "off",
   }
 }
