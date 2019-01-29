@@ -1,3 +1,7 @@
+// sX, sY: starting x and y
+// tX, tY: target x and y
+// speed: units the unit can move
+// terrain: terrain map from bc
 export default function nextMoveToDestination(sX, sY, tX, tY, speed, terrain) {
   const distances = [];
 
