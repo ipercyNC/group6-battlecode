@@ -11,6 +11,8 @@ class MyRobot extends BCAbstractRobot {
     super();
     this.karboniteTile = [-1, -1];
     this.fuelTile = [-1, -1];
+    this.parentCastle = [-1, -1];
+
     this.pendingRecievedMessages = {};
     this.enemyCastles = [];
     this.myType = undefined;

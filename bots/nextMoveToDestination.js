@@ -14,6 +14,7 @@ export default function nextMoveToDestination(sX, sY, tX, tY, speed, terrain) {
         const distanceFromTileToTarget = ((x - tX) ** 2 + (y - tY) ** 2) ** 0.5;
         const distanceFromTileToStart = ((x - sX) ** 2 + (y - sY) ** 2) ** 0.5;
         if (Math.ceil(distanceFromTileToStart) < speed) {
+          console.log(distanceFromTileToStart);
           row.push(distanceFromTileToTarget);
         } else {
           row.push(9999);

@@ -7,6 +7,7 @@
     "watch": "NODE_ENV=test jest --watch",
     "coverage": "NODE_ENV=test jest --coverage",
     "build": "rm -rf dist;mkdir dist;bc19compile -d bots -o dist/index.js",
+    "upload": "BC_USERNAME='usernamehere' BC_PASSWORD='passwordhere' bc19upload -i dist/index.js",
     "help": "bc19run"
   },
   "dependencies": {
