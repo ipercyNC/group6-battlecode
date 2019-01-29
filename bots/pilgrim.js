@@ -1,4 +1,6 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
+import getClosestKarbonite from "./getClosestKarbonite.js";
+import nextMoveToDestination from "./nextMoveToDestination.js";
 
 const pilgrim = {};
 
