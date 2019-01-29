@@ -8,7 +8,7 @@ castle.takeTurn = (self) => {
 
   // get attackable robots
   const attackable = visible.filter((r) => {
-    if (!self.isVisible()) {return false;}
+    if (!self.isVisible()) { return false; }
     const dist = (self.me.x - r.x) * (self.me.x - r.x) + (self.me.y - r.y) * (self.me.y - r.y);
     if (self.me.team !== r.team &&
     SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist
