@@ -29,16 +29,19 @@ castle.takeTurn = (self) => {
   // Attack the first robot if it is Prophet
   if (attackable.length > 0) {
     for (const x in attackable) {
-      if (x.unit === SPECS.PROPHET && self.fuel >= 50) {
+      if (x.unit === SPECS.PROPHET && self.fuel >= 10) {
         return self.attack(x.x - self.me.x, x.y - self.me.y);
       }
     }
     // get the first robot
     const r = attackable[0];
-    // attack the first robot if the fuel is higher than 60
-    if (self.fuel >= 60) {
+    // attack the first robot if the fuel is higher than 10 and less than 50
+    if (self.fuel >= 10 && self.fuel < 50) {
       return self.attack(r.x - self.me.x, r.y - self.me.y);
+    } else if (self.fuel >= 50) {
+      return self.buildUnit(SPECS.PROPHET, 1, 0);
     }
+
   }
 
   if (self.pilgrimsBuilt < 2 && self.karbonite >= 100) {
