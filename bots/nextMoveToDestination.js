@@ -13,7 +13,7 @@ export default function nextMoveToDestination(sX, sY, tX, tY, speed, terrain) {
       } else {
         const distanceFromTileToTarget = ((x - tX) ** 2 + (y - tY) ** 2) ** 0.5;
         const distanceFromTileToStart = ((x - sX) ** 2 + (y - sY) ** 2) ** 0.5;
-        if (distanceFromTileToStart <= speed) {
+        if (Math.ceil(distanceFromTileToStart) < speed) {
           row.push(distanceFromTileToTarget);
         } else {
           row.push(9999);
