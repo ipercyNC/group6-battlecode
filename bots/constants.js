@@ -3,7 +3,7 @@ export const PILGRIM_CONSTRUCTION_KARBONITE = 10;
 export const PILGRIM_CONSTRUCTION_FUEL = 50;
 export const PILGRIM_KARBONITE_CAPACITY = 20;
 export const PILGRIM_FUEL_CAPACITY = 100;
-export const PILGRIM_MOVE_SPEED = 4;
+export const PILGRIM_MOVE_SPEED = 1;
 export const PILGRIM_MOVEMENT_FUEL = 1;
 export const PILGRIM_HEALTH = 10;
 export const PILGRIM_VISION = 100;
@@ -59,3 +59,7 @@ export const PREACHER_ATTACK_FUEL = 15;
 
 export const CASTLE = 0;
 export const CHURCH = 1;
+
+
+export const KARBONITE = "KARBONITE";
+export const FUEL = "FUEL";
