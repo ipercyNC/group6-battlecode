@@ -3,7 +3,7 @@ import { BCAbstractRobot, SPECS } from "battlecode";
 const castle = {};
 
 castle.takeTurn = (self) => {
-  if (self.karbonite >= 100) {
+  if (self.pilgrimsBuilt < 10 && Math.random() < 0.5) { //} && self.karbonite >= 100) {
     self.log("Building a pilgrim at " + (self.me.x + 1) + "," + (self.me.y + 1));
     self.pilgrimsBuilt++;
     return self.buildUnit(SPECS.PILGRIM, 1, 0);

@@ -10,11 +10,14 @@ class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
     this.forbiddenResourceTiles = [];
-    this.karbTile = [-1, -1];
-    this.fuelTile = [-1, -1];
-    this.parentCastle = [-1, -1];
-    this.origin = [-1, -1];
+    this.resourceMap = null;
+    this.resourceTile = -1; // index into this.resourceTiles
+    this.castle = [-1, -1];
     this.infant = true;
+    this.resourceTiles = [];
+
+    // movement
+    this.traversedTiles = [];
 
     this.pendingRecievedMessages = {};
     this.enemyCastles = [];
@@ -50,116 +53,134 @@ class MyRobot extends BCAbstractRobot {
     return this.myType.takeTurn(this);
   }
 
-  // move the max distance to the target x and y
-  moveToTarget(tX, tY) {
-    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
+  _deepCopyMap(map) {
+    const copy = [];
+    for (let y = 0; y < map.length; y++) {
+      const row = [];
+      for (let x = 0; x < map[y].length; x++) {
+        row.push(map[y][x]);
+      }
+      copy.push(row);
+    }
+    return copy;
+  }
+
+  // set each visible bot's tile to false
+  // do the same for our traversed tiles
+  _markImpassableTiles(bots, map) {
+    for (let i = 0; i < bots.length; i++) {
+      if (this._coordIsValid(bots[i].x, bots[i].y)) {
+        map[bots[i].y][bots[i].x] = false;
+      }
+    }
+
+    for (let i = 0; i < this.traversedTiles.length; i++) {
+      if (this._coordIsValid(this.traversedTiles[i][0], this.traversedTiles[i][1])) {
+        map[this.traversedTiles[i][1]][this.traversedTiles[i][0]] = false;
+      }
+    }
+  }
+
+  _coordIsValid(x, y) {
+    if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
+      return true;
+    }
+    return false;
+  }
+
+  moveAdjacentToTarget(tX, tY) {
+    // check that we aren't already adjacent
+    const dX = this.me.x - tX;
+    const dY = this.me.y - tY;
+    if (dX >= -1 && dX <= 1 && dY >= -1 && dY <= 1) {
       return null;
     }
 
+
+    const opts = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1]];
+    const opt = opts[Math.floor(Math.random() * opts.length)];
+    return this.moveToTarget(tX + opt[0], tY + opt[1]);
+  }
+
+  // move to the target x and y, but only one square at a time
+  moveToTarget(tX, tY) {
+    // if already at the target then no need to do anything;
+    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
+      this.traversedTiles = [];
+      return null;
+    }
+
+    // deep copy the terrain map so we can modify it
+    const terrain = this._deepCopyMap(this.map);
+
+    // mark all bot-filled tiles as impassable
     const bots = this.getVisibleRobots();
-    const terrain = [];
+    this._markImpassableTiles(bots, terrain);
 
-    for (let y = 0; y < this.map.length; y++) {
+    // for each adjacent tile, calculate the distance from it to the target
+    // if the tile is impassable then mark the distance as really really high so it won't ever be chosen
+    const dists = [];
+    for (let dY = -1; dY <= 1; dY++) {
       const row = [];
-      for (let x = 0; x < this.map[y].length; x++) {
-        row.push(this.map[y][x]);
-      }
-      terrain.push(row);
-    }
-
-    for (let i = 0; i < bots.length; i++) {
-      terrain[bots[i].y][bots[i].x] = false;
-    }
-
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          const distanceFromTileToTarget = ((x - tX) ** 2 + (y - tY) ** 2);
-          const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2);
-          if (distanceFromTileToStart <= this.speed) {
-            row.push(distanceFromTileToTarget);
-          } else {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = this.me.x + dX;
+        const y = this.me.y + dY;
+        if (this._coordIsValid(x, y)) {
+          if (terrain[y][x] === false) {
             row.push(9999);
+          } else {
+            row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
           }
         }
       }
-      distances.push(row);
+      dists.push(row);
     }
 
     let bX = 0;
     let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
+    for (let i = 0; i < dists.length; i++) {
+      for (let j = 0; j < dists[i].length; j++) {
+        if (dists[i][j] < dists[bY][bX]) {
+          bX = j;
+          bY = i;
         }
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
+    // no legal movements -- robot is trapped and needs to backtrack
+    if (dists[bY][bX] === 9999) {
+      this.traversedTiles = [[this.me.x, this.me.y]];
       return null;
     }
 
-    const dX = bX - this.me.x;
-    const dY = bY - this.me.y;
-    this.log("Moving to: " + bX + " " + bY + " from: " + this.me.x + " " + this.me.y + " target: " + tX + " " + tY + " tdist: " + distances[tY][tX]);
+    // calculate deltas
+    const dX = bX - 1;
+    const dY = bY - 1;
 
-    // if (bX !== this.me.x && bY !== this.me.y) {
+    // if we're about to move to the target then erase the slug trail, otherwise add the new tile to the trail
+    if (this.me.x + dX === tX && this.me.y + dY === tY) {
+      this.traversedTiles = [];
+    } else {
+      this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
+    }
+
     return this.move(dX, dY);
-    // }
-
-    //    return null;
   }
 
 
-  getClosestResource(terrain) {
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          let forbidden = false;
-          for (let i = 0; i < this.forbiddenResourceTiles.length; i++) {
-            if (this.forbiddenResourceTiles[i][0] === x && this.forbiddenResourceTiles[i][1] === y) {
-              forbidden = true;
-            }
-          }
-          if (forbidden) {
-            row.push(9999);
-          } else {
-            const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2) ** 0.5;
-            row.push(distanceFromTileToStart);
-          }
-        }
-      }
-      distances.push(row);
-    }
-
-    let bX = 0;
-    let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
+  getClosestReadyResource(tiles) {
+    let closest = -1;
+    let bestDist = 99999;
+    for (let i = 0; i < tiles.length; i++) {
+      if (tiles[i].state === Constants.RESOURCE_TILE_READY) {
+        const dist = (tiles[i].x - this.me.x) ** 2 + (tiles[i].y - this.me.y) ** 2;
+        if (dist < bestDist) {
+          closest = i;
+          bestDist = dist;
         }
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
-      return [-1, -1];
-    }
-    return [bX, bY];
+    return closest;
   }
 }
