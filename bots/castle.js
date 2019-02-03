@@ -52,9 +52,9 @@ castle.takeTurn = (self) => {
     return self.buildUnit(SPECS.PILGRIM, 1, 0);
   }
 
-  if (self.karbonite > 200) {
-    return self.buildUnit(SPECS.CRUSADER, 1, 0);
-  }
+  //if (self.karbonite > 200) {
+  //  return self.buildUnit(SPECS.CRUSADER, 1, 0);
+  //}
 
   return null;
 };
