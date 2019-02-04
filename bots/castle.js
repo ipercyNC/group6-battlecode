@@ -1,62 +1,91 @@
-import { BCAbstractRobot, SPECS } from "battlecode";
+import { SPECS } from "battlecode";
+
+const haveResourcesToBuild = (unit, self) => {
+  if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
+    return true;
+  }
+  return false;
+};
+
+const buildOnRandomEmptyTile = (unit, self) => {
+  if (haveResourcesToBuild(unit, self)) {
+    const validTiles = [];
+    const botMap = self.getVisibleRobotMap();
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = self.me.x + dX;
+        const y = self.me.y + dY;
+        if (self._coordIsValid(x, y)) {
+          if (self.map[y][x] && botMap[y][x] === 0) {
+            validTiles.push({ dX, dY });
+          }
+        }
+      }
+    }
+
+    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
+    if (tile !== undefined) {
+      return self.buildUnit(unit, tile.dX, tile.dY);
+    }
+  }
+  return null;
+};
+
 
 const castle = {};
 
 castle.takeTurn = (self) => {
-  // get visible robots
-  const visible = self.getVisibleRobots();
+  self.step++;
 
-  // get attackable robots
-  const attackable = visible.filter((r) => {
-    if (!self.isVisible()) { return false; }
-    const dist = (self.me.x - r.x) * (self.me.x - r.x) + (self.me.y - r.y) * (self.me.y - r.y);
-    if (self.me.team !== r.team &&
-    SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist
-  && dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1]) { return true; }
+  // get all robots within range
+  const enemiesInRange = self.getVisibleRobots().filter((robot) => {
+    const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
+    const minRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0];
+    const maxRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1];
+    if (self.me.team !== robot.team && dist >= minRange && dist <= maxRange) {
+      return true;
+    }
     return false;
   });
 
+  // attack enemies in order of prophet > preacher > crusader > pilgrim
+  if (enemiesInRange.length > 0 && self.fuel >= 10) {
+    // break the list of attackable robots down by unit type
+    const enemyRobots = {
+      [SPECS.PROPHET]: [],
+      [SPECS.PREACHER]: [],
+      [SPECS.CRUSADER]: [],
+      [SPECS.PILGRIM]: [],
+    };
 
-  // self.log("castle taking turn");
-  if (self.step % 100) {
-    // self.log('KNOWN ENEMY CASTLES: ');
-    for (let i = 0; i < self.enemyCastles.length; i++) {
-      const { x, y } = self.enemyCastles[i];
-      self.log(x + "," + y);
+    // split the list up by unit to make it easy to prioritize targets
+    for (let i = 0; i < enemiesInRange.length; i++) {
+      enemyRobots[enemiesInRange[i].unit].push(enemiesInRange[i]);
     }
-  }
 
-  // Attack the first robot if it is Prophet
-  if (attackable.length > 0) {
-    for (let i = 0; i < attackable.length; i++) {
-      const x = attackable[i];
-      if (x.unit === SPECS.PROPHET && self.fuel >= 10) {
-        return self.attack(x.x - self.me.x, x.y - self.me.y);
+    // get the first enemy robot and attack it
+    for (const key in enemyRobots) {
+      if (enemyRobots[key].length > 0) {
+        const dX = enemyRobots[key][0].x - self.me.x;
+        const dY = enemyRobots[key][0].y - self.me.y;
+        return self.attack(dX, dY);
       }
     }
-    // get the first robot
-    const r = attackable[0];
-    // attack the first robot if the fuel is higher than 10 and less than 50
-    if (self.fuel >= 10 && self.fuel < 50) {
-      return self.attack(r.x - self.me.x, r.y - self.me.y);
-    }
-
-    if (self.fuel >= 50) {
-      return self.buildUnit(SPECS.PROPHET, 1, 0);
-    }
   }
 
-  if (self.pilgrimsBuilt < 2 && self.karbonite >= 100) {
-    self.log("Building a pilgrim at " + (self.me.x + 1) + "," + (self.me.y + 1));
-    self.pilgrimsBuilt++;
-    return self.buildUnit(SPECS.PILGRIM, 1, 0);
+  // build a pilgrim for the first two turns
+  if (self.step <= 2) {
+    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
   }
 
-  //if (self.karbonite > 200) {
-  //  return self.buildUnit(SPECS.CRUSADER, 1, 0);
-  //}
-
-  return null;
+  const unit = self.buildCycle[self.buildIndex];
+  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
+    self.buildIndex++;
+    if (self.buildIndex >= self.buildCycle.length) {
+      self.buildIndex = 0;
+    }
+    return buildOnRandomEmptyTile(unit, self);
+  }
 };
 
 

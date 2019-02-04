@@ -73,11 +73,11 @@ pilgrim.takeTurn = (self) => {
   if (self.resourceTile !== -1) {
     if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
       if (self.resource === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-        self.log("Mine karb");
+        //  self.log("Mine karb");
         return self.mine();
       }
       if (self.resource === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-        self.log("Mine fuel");
+        //  self.log("Mine fuel");
         return self.mine();
       }
     }
@@ -89,14 +89,14 @@ pilgrim.takeTurn = (self) => {
   if (self.resourceTile !== -1) {
     // move to karb
     if (self.resource === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-      self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
+      //  self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
 
     // move to fuel
     if (self.resource === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-      self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
+      //self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
   }
 
@@ -105,15 +105,15 @@ pilgrim.takeTurn = (self) => {
   if ((self.me.x >= self.castle[0] - 1) && (self.me.x <= self.castle[0] + 1) && (self.me.y >= self.castle[1] - 1) && (self.me.y <= self.castle[1] + 1)) {
     const dX = self.castle[0] - self.me.x;
     const dY = self.castle[1] - self.me.y;
-    self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.castle[0] + " " + self.castle[1] + "  " + dX + " " + dY);
+    //self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.castle[0] + " " + self.castle[1] + "  " + dX + " " + dY);
 
     self.infant = true;
     return self.give(dX, dY, self.me.karbonite, self.me.fuel);
   }
 
   // go back home
-  self.log("Going home");
-  return self.moveAdjacentToTarget(self.castle[0], self.castle[1]);
+  //self.log("Going home");
+  return self.sanitizeRet(self.moveAdjacentToTarget(self.castle[0], self.castle[1]));
 };
 
 export default pilgrim;

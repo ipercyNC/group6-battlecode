@@ -9,20 +9,35 @@ import * as Constants from "./constants.js";
 class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
-    this.forbiddenResourceTiles = [];
+    // general
+    this.infant = true;
+    this.traversedTiles = [];
+
+    // pilgrim
     this.resourceMap = null;
     this.resourceTile = -1; // index into this.resourceTiles
     this.castle = [-1, -1];
-    this.infant = true;
     this.resourceTiles = [];
+    this.forbiddenResourceTiles = [];
 
-    // movement
-    this.traversedTiles = [];
+    // prophet
+    this.porcDestination = [-1, -1];
+    this.inTransit = true;
+
+    // castle
+    this.step = 0;
+    this.buildIndex = 0;
+    this.buildCycle = [
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PILGRIM,
+    ];
 
     this.pendingRecievedMessages = {};
     this.enemyCastles = [];
     this.myType = undefined;
-    this.step = -1;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
   }
@@ -102,12 +117,19 @@ class MyRobot extends BCAbstractRobot {
     return this.moveToTarget(tX + opt[0], tY + opt[1]);
   }
 
+  sanitizeRet(ret) {
+    if (typeof ret === "string") {
+      return null;
+    }
+    return ret;
+  }
+
   // move to the target x and y, but only one square at a time
   moveToTarget(tX, tY) {
     // if already at the target then no need to do anything;
     if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
       this.traversedTiles = [];
-      return null;
+      return Constants.AT_TARGET;
     }
 
     // deep copy the terrain map so we can modify it
@@ -131,6 +153,8 @@ class MyRobot extends BCAbstractRobot {
           } else {
             row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
           }
+        } else {
+          row.push(9999);
         }
       }
       dists.push(row);
@@ -150,7 +174,7 @@ class MyRobot extends BCAbstractRobot {
     // no legal movements -- robot is trapped and needs to backtrack
     if (dists[bY][bX] === 9999) {
       this.traversedTiles = [[this.me.x, this.me.y]];
-      return null;
+      return Constants.TRAPPED;
     }
 
     // calculate deltas

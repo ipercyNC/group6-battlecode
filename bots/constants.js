@@ -64,8 +64,15 @@ export const CHURCH = 1;
 export const KARBONITE = "KARBONITE";
 export const FUEL = "FUEL";
 
-export const RESOURCE_TILE_BARREN = "BARREN";
 export const RESOURCE_TILE_BUSY = "BUSY";
 export const RESOURCE_TILE_READY = "READY";
 
-export const IDEAL_FUEL_TO_KARB_RATIO = 3;
+export const IDEAL_FUEL_TO_KARB_RATIO = 4;
+
+export const PORC_READY = "PORC_READY";
+export const PORC_ADJACENT = "PORC_ADJACENT";
+export const PORC_BUSY = "PORC_BUSY";
+export const PORC_IMPASSABLE = "PORC_IMPASSABLE";
+
+export const AT_TARGET = "AT_TARGET";
+export const TRAPPED = "TRAPPED";
