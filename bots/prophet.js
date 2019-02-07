@@ -3,42 +3,60 @@ import * as Constants from "./constants.js";
 
 const prophet = {};
 
+const tileIsPorced = (x, y, self) => {
+  const botMap = self.getVisibleRobotMap();
+  if (botMap[y][x] > 0) {
+    const bot = self.getRobot(botMap[y][x]).unit;
+    if (bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const getPorcDestination = (self) => {
-  let x = self.castle[0];
-  let y = self.castle[1];
+  const cX = self.me.x; // center x
+  const cY = self.me.y; // center y
 
-  const maxWidth = self.map[0].length;
+  const GRID_SPACE = 1;
 
-  // this isn't quite a spiral but it's close enough
-  for (let i = 1; i < maxWidth; i += 3) { // i is the radius of the spiral
-    for (let dY = -i; dY <= i; dY += 3) {
-      for (let dX = -i; dX <= i; dX += 3) {
-        if ((dX === -i || dX === i) || (dY === -i || dY === i)) {
-          x = self.castle[0] + dX;
-          y = self.castle[1] + dY;
-          if (self._coordIsValid(x, y)) {
-            if (self.map[y][x]) { // check that the tile isn't impassable
-              if (!self.karbonite_map[y][x] && !self.fuel_map[y][x]) { // don't stand on resource tiles
-                let occupied = false;
-                const bots = self.getVisibleRobots();
-                for (let j = 0; j < bots.length; j++) {
-                  if (bots[j].x === x && bots[j].y === y) {
-                    occupied = true;
-                  }
-                }
-                if (!occupied) {
-                  self.log("Porc Dest: " + x + " " + y);
-                  return [x, y];
-                }
-              }
-            }
-          }
+  // create a map of distances from our castle to available porc tiles
+  const botMap = self.getVisibleRobotMap();
+  const porcMap = [];
+  for (let y = 0; y < botMap.length; y++) {
+    const row = [];
+    for (let x = 0; x < botMap[y].length; x++) {
+      if (x % (GRID_SPACE + 1) === 0 && y % (GRID_SPACE + 1) === 0) {
+        if ((tileIsPorced(x, y, self)) || // can't build porc if there's already porc there
+          (self.karbonite_map[y][x]) || // don't build on karb
+          (self.fuel_map[y][x]) || // or fuel
+          (!self.map[y][x]) // can't build on a wall
+        ) {
+          row.push(99999);
+        } else {
+          row.push((x - cX) ** 2 + (y - cY) ** 2);
         }
+      } else {
+        row.push(99999);
+      }
+    }
+    porcMap.push(row);
+  }
+
+  // pick the closest open tile
+  let bX = 0;
+  let bY = 0;
+  for (let y = 0; y < porcMap.length; y++) {
+    for (let x = 0; x < porcMap[y].length; x++) {
+      if (porcMap[y][x] < porcMap[bY][bX]) {
+        bX = x;
+        bY = y;
       }
     }
   }
 
-  return [-1, -1];
+  return [bX, bY];
 };
 
 prophet.takeTurn = (self) => {
@@ -57,22 +75,30 @@ prophet.takeTurn = (self) => {
     self.porcDestination = getPorcDestination(self);
   }
 
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].team !== self.me.team) {
+      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.PROPHET].ATTACK_RADIUS) {
+        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+      }
+    }
+  }
+
   if (self.inTransit) {
     if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+      // if we're at our dest then stop moving
+      // if someone got there first then pick a new dest
       const botMap = self.getVisibleRobotMap();
       if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
-        if (botMap[self.porcDestination[1]][self.porcDestination[0]] !== self.me.id) {
-          self.porcDestination = getPorcDestination(self);
-        } else {
+        if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
           self.inTransit = false;
+        } else if (tileIsPorced(self.porcDestination[0], self.porcDestination[1], self)) {
+          self.porcDestination = getPorcDestination(self);
         }
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
         return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
       }
-    } else {
-      self.porcDestination = getPorcDestination(self);
     }
   }
 

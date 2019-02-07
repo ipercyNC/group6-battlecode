@@ -253,6 +253,307 @@ class BCAbstractRobot {
     }
 }
 
+const PILGRIM_KARBONITE_CAPACITY = 20;
+const PILGRIM_FUEL_CAPACITY = 100;
+const PILGRIM_MOVE_SPEED = 2;
+const CRUSADER_MOVE_SPEED = 3;
+const PROPHET_MOVE_SPEED = 2;
+
+const CASTLE = 0;
+
+
+const KARBONITE = "KARBONITE";
+const FUEL = "FUEL";
+
+const RESOURCE_TILE_BUSY = "BUSY";
+const RESOURCE_TILE_READY = "READY";
+
+const IDEAL_FUEL_TO_KARB_RATIO = 4;
+
+const AT_TARGET = "AT_TARGET";
+const TRAPPED = "TRAPPED";
+
+const prophet = {};
+
+const getPorcDestination = (self) => {
+  let x = self.castle[0];
+  let y = self.castle[1];
+
+  const maxWidth = self.map[0].length;
+
+  // this isn't quite a spiral but it's close enough
+  for (let i = 1; i < maxWidth; i += 3) { // i is the radius of the spiral
+    for (let dY = -i; dY <= i; dY += 3) {
+      for (let dX = -i; dX <= i; dX += 3) {
+        if ((dX === -i || dX === i) || (dY === -i || dY === i)) {
+          x = self.castle[0] + dX;
+          y = self.castle[1] + dY;
+          if (self._coordIsValid(x, y)) {
+            if (self.map[y][x]) { // check that the tile isn't impassable
+              if (!self.karbonite_map[y][x] && !self.fuel_map[y][x]) { // don't stand on resource tiles
+                let occupied = false;
+                const bots = self.getVisibleRobots();
+                for (let j = 0; j < bots.length; j++) {
+                  if (bots[j].x === x && bots[j].y === y) {
+                    occupied = true;
+                  }
+                }
+                if (!occupied) {
+                  self.log("Porc Dest: " + x + " " + y);
+                  return [x, y];
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return [-1, -1];
+};
+
+prophet.takeTurn = (self) => {
+  const bots = self.getVisibleRobots();
+
+  if (self.infant) {
+    self.infant = false;
+
+    // save the first castle we see as our porc center to align the grid
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].unit === SPECS.CASTLE) {
+        self.castle = [bots[i].x, bots[i].y];
+      }
+    }
+
+    self.porcDestination = getPorcDestination(self);
+  }
+
+  if (self.inTransit) {
+    if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+      const botMap = self.getVisibleRobotMap();
+      if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
+        if (botMap[self.porcDestination[1]][self.porcDestination[0]] !== self.me.id) {
+          self.porcDestination = getPorcDestination(self);
+        } else {
+          self.inTransit = false;
+        }
+      }
+
+      if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
+      }
+    } else {
+      self.porcDestination = getPorcDestination(self);
+    }
+  }
+
+  return null;
+};
+
+const haveResourcesToBuild = (unit, self) => {
+  if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
+    return true;
+  }
+  return false;
+};
+
+const buildOnRandomEmptyTile = (unit, self) => {
+  if (haveResourcesToBuild(unit, self)) {
+    const validTiles = [];
+    const botMap = self.getVisibleRobotMap();
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = self.me.x + dX;
+        const y = self.me.y + dY;
+        if (self._coordIsValid(x, y)) {
+          if (self.map[y][x] && botMap[y][x] === 0) {
+            validTiles.push({ dX, dY });
+          }
+        }
+      }
+    }
+
+    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
+    if (tile !== undefined) {
+      return self.buildUnit(unit, tile.dX, tile.dY);
+    }
+  }
+  return null;
+};
+
+
+const castle = {};
+
+castle.takeTurn = (self) => {
+  self.step++;
+
+  // get all robots within range
+  const enemiesInRange = self.getVisibleRobots().filter((robot) => {
+    const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
+    const minRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0];
+    const maxRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1];
+    if (self.me.team !== robot.team && dist >= minRange && dist <= maxRange) {
+      return true;
+    }
+    return false;
+  });
+
+  // attack enemies in order of prophet > preacher > crusader > pilgrim
+  if (enemiesInRange.length > 0 && self.fuel >= 10) {
+    // break the list of attackable robots down by unit type
+    const enemyRobots = {
+      [SPECS.PROPHET]: [],
+      [SPECS.PREACHER]: [],
+      [SPECS.CRUSADER]: [],
+      [SPECS.PILGRIM]: [],
+    };
+
+    // split the list up by unit to make it easy to prioritize targets
+    for (let i = 0; i < enemiesInRange.length; i++) {
+      enemyRobots[enemiesInRange[i].unit].push(enemiesInRange[i]);
+    }
+
+    // get the first enemy robot and attack it
+    for (const key in enemyRobots) {
+      if (enemyRobots[key].length > 0) {
+        const dX = enemyRobots[key][0].x - self.me.x;
+        const dY = enemyRobots[key][0].y - self.me.y;
+        return self.attack(dX, dY);
+      }
+    }
+  }
+
+  // build a pilgrim for the first two turns
+  if (self.step <= 2) {
+    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
+  }
+
+  const unit = self.buildCycle[self.buildIndex];
+  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
+    self.buildIndex++;
+    if (self.buildIndex >= self.buildCycle.length) {
+      self.buildIndex = 0;
+    }
+    return buildOnRandomEmptyTile(unit, self);
+  }
+};
+
+const pilgrim = {};
+
+// gather all of the actual valid resource cells into an array and turn them into objects
+// each object has coords and state that change depending on if a robot is using the tile
+const resourceMapToArray = (map) => {
+  const resourceTiles = [];
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      if (map[y][x]) { // has resource
+        resourceTiles.push({ x, y, state: RESOURCE_TILE_READY });
+      }
+    }
+  }
+  return resourceTiles;
+};
+
+pilgrim.takeTurn = (self) => {
+  const bots = self.getVisibleRobots();
+
+  // save important info on the first cycle of each trip
+  if (self.infant) {
+    self.infant = false;
+    // pick a resource type based on stashes
+    if (self.fuel >= self.karbonite * IDEAL_FUEL_TO_KARB_RATIO) {
+      self.resource = KARBONITE;
+      self.resourceMap = self.karbonite_map;
+    } else {
+      self.resource = FUEL;
+      self.resourceMap = self.fuel_map;
+    }
+    self.resourceTiles = resourceMapToArray(self.resourceMap);
+
+    // this will be recalculated each round
+    self.resourceTile = self.getClosestReadyResource(self.resourceTiles);
+  }
+
+  // update our resource map
+  // tiles in vision without robots get set to ready
+  // tiles in vision with robots get set to busy
+  const visibleRobotMap = self.getVisibleRobotMap();
+  for (let y = 0; y < visibleRobotMap.length; y++) {
+    for (let x = 0; x < visibleRobotMap[y].length; x++) {
+      if (self.resourceMap[y][x]) {
+        // find the relevant resource tile
+        let index = -1;
+        for (let j = 0; j < self.resourceTiles.length; j++) {
+          if (self.resourceTiles[j].x === x && self.resourceTiles[j].y === y) {
+            index = j;
+          }
+        }
+        if (index >= 0) {
+          if (visibleRobotMap[y][x] === 0) {
+            self.resourceTiles[index].state = RESOURCE_TILE_READY;
+          } else if (visibleRobotMap[y][x] > 0) {
+            self.resourceTiles[index].state = RESOURCE_TILE_BUSY;
+          }
+        }
+      }
+    }
+  }
+
+  // if we see a castle, its probably closer to our destination resource tile so save its location
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].unit === CASTLE) {
+      self.castle = [bots[i].x, bots[i].y];
+    }
+  }
+
+  // mine resource if carrying space and on its tile
+  if (self.resourceTile !== -1) {
+    if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
+      if (self.resource === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+        //  self.log("Mine karb");
+        return self.mine();
+      }
+      if (self.resource === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+        //  self.log("Mine fuel");
+        return self.mine();
+      }
+    }
+  }
+
+  // pick the nearest available resource
+  self.resourceTile = self.getClosestReadyResource(self.resourceTiles);
+
+  if (self.resourceTile !== -1) {
+    // move to karb
+    if (self.resource === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+      //  self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
+    }
+
+    // move to fuel
+    if (self.resource === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+      //self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
+    }
+  }
+
+
+  // standing next to castle so wait to give it automatically
+  if ((self.me.x >= self.castle[0] - 1) && (self.me.x <= self.castle[0] + 1) && (self.me.y >= self.castle[1] - 1) && (self.me.y <= self.castle[1] + 1)) {
+    const dX = self.castle[0] - self.me.x;
+    const dY = self.castle[1] - self.me.y;
+    //self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.castle[0] + " " + self.castle[1] + "  " + dX + " " + dY);
+
+    self.infant = true;
+    return self.give(dX, dY, self.me.karbonite, self.me.fuel);
+  }
+
+  // go back home
+  //self.log("Going home");
+  return self.sanitizeRet(self.moveAdjacentToTarget(self.castle[0], self.castle[1]));
+};
+
 const navigation = {};
 
 navigation.dirMove = (self, destination) => {
@@ -277,119 +578,6 @@ navigation.dirMove = (self, destination) => {
 navigation.basicMove = (self, destination) => {
   // self.log("destx " + destination[0] + "dy " + destination[1]);
   return [destination[0], destination[1]];
-};
-
-const prophet = {};
-
-prophet.takeTurn = (self) => {
-  const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-  const choice = choices[Math.floor(Math.random() * choices.length)];
-  const target = navigation.startMove(self, choice);
-  // self.log("trying to move to " + target);
-  return self.move(target.x, target.y);
-};
-
-const castle = {};
-
-castle.takeTurn = (self) => {
-  if (self.karbonite >= 100) {
-    self.log("Building a pilgrim at " + (self.me.x + 1) + "," + (self.me.y + 1));
-    self.pilgrimsBuilt++;
-    return self.buildUnit(SPECS.PILGRIM, 1, 0);
-  }
-
-  //if (self.karbonite > 200) {
-  //  return self.buildUnit(SPECS.CRUSADER, 1, 0);
-  //}
-
-  return null;
-};
-
-const PILGRIM_KARBONITE_CAPACITY = 20;
-const PILGRIM_FUEL_CAPACITY = 100;
-const PILGRIM_MOVE_SPEED = 4;
-const CRUSADER_MOVE_SPEED = 9;
-const PROPHET_MOVE_SPEED = 4;
-
-const CASTLE = 0;
-
-const pilgrim = {};
-
-pilgrim.takeTurn = (self) => {
-  const bots = self.getVisibleRobots();
-
-  // save important info on the first cycle
-  if (self.infant) {
-    self.infant = false;
-    self.origin = [self.me.x, self.me.y];
-    const visibleUnits = bots;
-    for (let i = 0; i < visibleUnits.length; i++) {
-      if (visibleUnits[i].unit === CASTLE) {
-        self.parentCastle = [visibleUnits[i].x, visibleUnits[i].y];
-      }
-    }
-  }
-
-  // check to see if there's a bot that isn't us already on our resource tile
-  // if so, we need to pick a new resource tile
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].id !== self.me.id) {
-      if (bots[i].x === self.karbTile[0] && bots[i].y === self.karbTile[1]) {
-        self.forbiddenResourceTiles.push(self.karbTile);
-        self.karbTile = [-1, -1];
-      }
-      if (bots[i].x === self.fuelTile[0] && bots[i].y === self.fuelTile[1]) {
-        self.forbiddenResourceTiles.push(self.fuelTile);
-        self.fuelTile = [-1, -1];
-      }
-    }
-  }
-
-  self.log(self.karbTile + " " + self.fuelTile + " forb: " + self.forbiddenResourceTiles);
-
-  // save resource tiles if necessary
-  if (self.karbTile[0] === -1 && self.karbTile[1] === -1) {
-    self.karbTile = self.getClosestResource(self.karbonite_map);
-  }
-  if (self.fuelTile[0] === -1 && self.fuelTile[1] === -1) {
-    self.fuelTile = self.getClosestResource(self.fuel_map);
-  }
-
-  // mine karb if space and on its tile
-  if ((self.me.x === self.karbTile[0]) && (self.me.y === self.karbTile[1]) && (self.me.karbonite < PILGRIM_KARBONITE_CAPACITY)) {
-    self.log("Mine karb");
-    return self.mine();
-  }
-
-  // mine fuel if space and on fuel tile
-  if ((self.me.x === self.fuelTile[0]) && (self.me.y === self.fuelTile[1]) && (self.me.fuel < PILGRIM_FUEL_CAPACITY)) {
-    self.log("Mine fuel");
-    return self.mine();
-  }
-
-  // move to karb
-  if (self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-    self.log("Move to karb " + self.karbTile[0] + " " + self.karbTile[1]);
-    return self.moveToTarget(self.karbTile[0], self.karbTile[1]);
-  }
-
-  // move to fuel
-  if (self.me.fuel < PILGRIM_FUEL_CAPACITY) { // move to fuel
-    self.log("Move to fuel " + self.fuelTile[0] + " " + self.fuelTile[1]);
-    return self.moveToTarget(self.fuelTile[0], self.fuelTile[1]);
-  }
-
-  // standing next to castle so wait to give it automatically
-  if ((self.me.x >= self.parentCastle[0] - 1) && (self.me.x <= self.parentCastle[0] + 1) && (self.me.y >= self.parentCastle[1] - 1) && (self.me.y <= self.parentCastle[1] + 1)) {
-    const dX = self.parentCastle[0] - self.me.x;
-    const dY = self.parentCastle[1] - self.me.y;
-    self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.parentCastle[0] + " " + self.parentCastle[1] + "  " + dX + " " + dY);
-    return self.give(dX, dY, 20, 100);
-  }
-
-  // go back home
-  self.log("Going home");
-  return self.moveToTarget(self.origin[0], self.origin[1]);
 };
 
 const crusader = {};
@@ -431,17 +619,35 @@ crusader.takeTurn = (self) => {
 class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
-    this.forbiddenResourceTiles = [];
-    this.karbTile = [-1, -1];
-    this.fuelTile = [-1, -1];
-    this.parentCastle = [-1, -1];
-    this.origin = [-1, -1];
+    // general
     this.infant = true;
+    this.traversedTiles = [];
+
+    // pilgrim
+    this.resourceMap = null;
+    this.resourceTile = -1; // index into this.resourceTiles
+    this.castle = [-1, -1];
+    this.resourceTiles = [];
+    this.forbiddenResourceTiles = [];
+
+    // prophet
+    this.porcDestination = [-1, -1];
+    this.inTransit = true;
+
+    // castle
+    this.step = 0;
+    this.buildIndex = 0;
+    this.buildCycle = [
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PROPHET,
+      SPECS.PILGRIM,
+    ];
 
     this.pendingRecievedMessages = {};
     this.enemyCastles = [];
     this.myType = undefined;
-    this.step = -1;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
   }
@@ -472,117 +678,144 @@ class MyRobot extends BCAbstractRobot {
     return this.myType.takeTurn(this);
   }
 
-  // move the max distance to the target x and y
-  moveToTarget(tX, tY) {
-    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
+  _deepCopyMap(map) {
+    const copy = [];
+    for (let y = 0; y < map.length; y++) {
+      const row = [];
+      for (let x = 0; x < map[y].length; x++) {
+        row.push(map[y][x]);
+      }
+      copy.push(row);
+    }
+    return copy;
+  }
+
+  // set each visible bot's tile to false
+  // do the same for our traversed tiles
+  _markImpassableTiles(bots, map) {
+    for (let i = 0; i < bots.length; i++) {
+      if (this._coordIsValid(bots[i].x, bots[i].y)) {
+        map[bots[i].y][bots[i].x] = false;
+      }
+    }
+
+    for (let i = 0; i < this.traversedTiles.length; i++) {
+      if (this._coordIsValid(this.traversedTiles[i][0], this.traversedTiles[i][1])) {
+        map[this.traversedTiles[i][1]][this.traversedTiles[i][0]] = false;
+      }
+    }
+  }
+
+  _coordIsValid(x, y) {
+    if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
+      return true;
+    }
+    return false;
+  }
+
+  moveAdjacentToTarget(tX, tY) {
+    // check that we aren't already adjacent
+    const dX = this.me.x - tX;
+    const dY = this.me.y - tY;
+    if (dX >= -1 && dX <= 1 && dY >= -1 && dY <= 1) {
       return null;
     }
 
+
+    const opts = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1]];
+    const opt = opts[Math.floor(Math.random() * opts.length)];
+    return this.moveToTarget(tX + opt[0], tY + opt[1]);
+  }
+
+  sanitizeRet(ret) {
+    if (typeof ret === "string") {
+      return null;
+    }
+    return ret;
+  }
+
+  // move to the target x and y, but only one square at a time
+  moveToTarget(tX, tY) {
+    // if already at the target then no need to do anything;
+    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
+      this.traversedTiles = [];
+      return AT_TARGET;
+    }
+
+    // deep copy the terrain map so we can modify it
+    const terrain = this._deepCopyMap(this.map);
+
+    // mark all bot-filled tiles as impassable
     const bots = this.getVisibleRobots();
-    const terrain = [];
+    this._markImpassableTiles(bots, terrain);
 
-    for (let y = 0; y < this.map.length; y++) {
+    // for each adjacent tile, calculate the distance from it to the target
+    // if the tile is impassable then mark the distance as really really high so it won't ever be chosen
+    const dists = [];
+    for (let dY = -1; dY <= 1; dY++) {
       const row = [];
-      for (let x = 0; x < this.map[y].length; x++) {
-        row.push(this.map[y][x]);
-      }
-      terrain.push(row);
-    }
-
-    for (let i = 0; i < bots.length; i++) {
-      terrain[bots[i].y][bots[i].x] = false;
-    }
-
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          const distanceFromTileToTarget = ((x - tX) ** 2 + (y - tY) ** 2);
-          const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2);
-          if (distanceFromTileToStart <= this.speed) {
-            row.push(distanceFromTileToTarget);
-          } else {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = this.me.x + dX;
+        const y = this.me.y + dY;
+        if (this._coordIsValid(x, y)) {
+          if (terrain[y][x] === false) {
             row.push(9999);
+          } else {
+            row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
           }
+        } else {
+          row.push(9999);
         }
       }
-      distances.push(row);
+      dists.push(row);
     }
 
     let bX = 0;
     let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
+    for (let i = 0; i < dists.length; i++) {
+      for (let j = 0; j < dists[i].length; j++) {
+        if (dists[i][j] < dists[bY][bX]) {
+          bX = j;
+          bY = i;
         }
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
-      return null;
+    // no legal movements -- robot is trapped and needs to backtrack
+    if (dists[bY][bX] === 9999) {
+      this.traversedTiles = [[this.me.x, this.me.y]];
+      return TRAPPED;
     }
 
-    const dX = bX - this.me.x;
-    const dY = bY - this.me.y;
-    this.log("Moving to: " + bX + " " + bY + " from: " + this.me.x + " " + this.me.y + " target: " + tX + " " + tY + " tdist: " + distances[tY][tX]);
+    // calculate deltas
+    const dX = bX - 1;
+    const dY = bY - 1;
 
-    // if (bX !== this.me.x && bY !== this.me.y) {
+    // if we're about to move to the target then erase the slug trail, otherwise add the new tile to the trail
+    if (this.me.x + dX === tX && this.me.y + dY === tY) {
+      this.traversedTiles = [];
+    } else {
+      this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
+    }
+
     return this.move(dX, dY);
-    // }
-
-    //    return null;
   }
 
 
-  getClosestResource(terrain) {
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          let forbidden = false;
-          for (let i = 0; i < this.forbiddenResourceTiles.length; i++) {
-            if (this.forbiddenResourceTiles[i][0] === x && this.forbiddenResourceTiles[i][1] === y) {
-              forbidden = true;
-            }
-          }
-          if (forbidden) {
-            row.push(9999);
-          } else {
-            const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2) ** 0.5;
-            row.push(distanceFromTileToStart);
-          }
-        }
-      }
-      distances.push(row);
-    }
-
-    let bX = 0;
-    let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
+  getClosestReadyResource(tiles) {
+    let closest = -1;
+    let bestDist = 99999;
+    for (let i = 0; i < tiles.length; i++) {
+      if (tiles[i].state === RESOURCE_TILE_READY) {
+        const dist = (tiles[i].x - this.me.x) ** 2 + (tiles[i].y - this.me.y) ** 2;
+        if (dist < bestDist) {
+          closest = i;
+          bestDist = dist;
         }
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
-      return [-1, -1];
-    }
-    return [bX, bY];
+    return closest;
   }
 }
 

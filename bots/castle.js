@@ -37,6 +37,20 @@ const castle = {};
 castle.takeTurn = (self) => {
   self.step++;
 
+  if (self.infant) {
+    self.infant = false;
+
+    for (let dY = -4; dY <= 4; dY++) {
+      for (let dX = -4; dX <= 4; dX++) {
+        if (self._coordIsValid(self.me.x + dX, self.me.y + dY)) {
+          if (self.karbonite_map[self.me.y + dY][self.me.x + dX] || self.fuel_map[self.me.y + dY][self.me.x + dX]) {
+            self.nNearbyResources++;
+          }
+        }
+      }
+    }
+  }
+
   // get all robots within range
   const enemiesInRange = self.getVisibleRobots().filter((robot) => {
     const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
@@ -73,8 +87,9 @@ castle.takeTurn = (self) => {
     }
   }
 
-  // build a pilgrim for the first two turns
-  if (self.step <= 2) {
+  // priority build a pilgrim for all of the resources within four tiles of the castle
+  if (self.step <= self.nNearbyResources) {
+    // return buildOnRandomEmptyTile(SPECS.PROPHET, self);
     return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
   }
 

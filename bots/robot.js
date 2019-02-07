@@ -26,6 +26,7 @@ class MyRobot extends BCAbstractRobot {
 
     // castle
     this.step = 0;
+    this.nNearbyResources = 0;
     this.buildIndex = 0;
     this.buildCycle = [
       SPECS.PROPHET,
@@ -96,6 +97,26 @@ class MyRobot extends BCAbstractRobot {
     }
   }
 
+  coordIsAdjacentToResource(x, y) {
+    const maxX = this.karbonite_map[0].length - 1;
+    const maxY = this.karbonite_map.length - 1;
+    const minX = 0;
+    const minY = 0;
+    if (
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x - 1]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x - 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 0]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 0])
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   _coordIsValid(x, y) {
     if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
       return true;
@@ -112,7 +133,17 @@ class MyRobot extends BCAbstractRobot {
     }
 
 
-    const opts = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1]];
+    const opts = [
+      [-1, -1],
+      [-1, 0],
+      [-1, 1],
+      [0, -1],
+      [0, 0],
+      [0, 1],
+      [1, -1],
+      [1, 0],
+      [1, 1]
+    ];
     const opt = opts[Math.floor(Math.random() * opts.length)];
     return this.moveToTarget(tX + opt[0], tY + opt[1]);
   }
@@ -173,7 +204,9 @@ class MyRobot extends BCAbstractRobot {
 
     // no legal movements -- robot is trapped and needs to backtrack
     if (dists[bY][bX] === 9999) {
-      this.traversedTiles = [[this.me.x, this.me.y]];
+      this.traversedTiles = [
+        [this.me.x, this.me.y]
+      ];
       return Constants.TRAPPED;
     }
 
@@ -186,6 +219,14 @@ class MyRobot extends BCAbstractRobot {
       this.traversedTiles = [];
     } else {
       this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x + 0, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x + 0, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y + 0]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y + 0]);
     }
 
     return this.move(dX, dY);

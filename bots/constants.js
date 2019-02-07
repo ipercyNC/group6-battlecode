@@ -63,6 +63,7 @@ export const CHURCH = 1;
 
 export const KARBONITE = "KARBONITE";
 export const FUEL = "FUEL";
+export const EMPTY = "EMPTY";
 
 export const RESOURCE_TILE_BUSY = "BUSY";
 export const RESOURCE_TILE_READY = "READY";
