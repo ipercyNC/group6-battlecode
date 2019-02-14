@@ -1,6 +1,6 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
-import * as Constants from "./constants.js";
-import navigation from './navigation.js';
+import navigation from "./navigation.js";
+
 const prophet = {};
 
 prophet.takeTurn = (self) => {
@@ -8,12 +8,12 @@ prophet.takeTurn = (self) => {
   const bots = self.getVisibleRobots();
   // get enemy castles
   const e_castles = bots.filter((r) => {
-      if (r.unit === SPECS.CASTLE
+    if (r.unit === SPECS.CASTLE
         && r.team !== self.me.team) {
-          return true;
-        }
-        return false;
-    });
+      return true;
+    }
+    return false;
+  });
 
 
   if (e_castles.length > 0 ) {
@@ -22,10 +22,10 @@ prophet.takeTurn = (self) => {
     for (let i = 0; i < e_castles.length; i++) {
       // if visible enemy castles in attackable range, then attack it
       if (navigation.attackable(self.me, e_castles[i])) {
-        self.log('Attacking Castle');
+        self.log("Attacking Castle");
         return self.attack(e_castles[i].x - self.me.x, e_castles[i].y - self.me.y);
       }
-      //otherwise, look for the closest one
+      // otherwise, look for the closest one
       const newDist = navigation.Distance(self.me, e_castle);
       if (newDist < dist) {
         dist = newDist;
@@ -33,7 +33,7 @@ prophet.takeTurn = (self) => {
       }
     }
     // moving to the closest one
-    self.log('Moving closer to castle');
+    self.log("Moving closer to castle");
     return self.move(navigation.moveToTarget(self.me, e_castle, self.getPassableMap(), self.getVisibleRobotMap()));
   }
 
@@ -43,7 +43,7 @@ prophet.takeTurn = (self) => {
     if (r.unit === SPECS.CASTLE && r.team === self.me.team) {
       return true;
     }
-    return false
+    return false;
   });
 
   // get enemy robots
@@ -66,34 +66,33 @@ prophet.takeTurn = (self) => {
       }
       //otherwise, look for the closest one between our robot and castle
       const newDist = navigation.Distance(self.me, e_bot);
-      var dist_Castle = 99999;
+      let dist_Castle = 99999;
       if (o_castles.length > 0) {
-        for (let j=0; j < o_castles.length; j++) {
+        for (let j = 0; j < o_castles.length; j++) {
           const newDist_Castle = navigation.Distance(self.me, o_castles[j]);
           if (newDist + newDist_Castle < dist) {
             dist = newDist;
+            dist_Castle = newDist_Castle;
             e_bot = e_bots[i];
           }
         }
-      } else {
-        if (newDist < dist) {
-          dist = newDist;
-          e_bot = e_bots[i];
-        };
-      };
+      } else if (newDist < dist) {
+        dist = newDist;
+        e_bot = e_bots[i];
+      }
     }
     // moving to the closest one
-    self.log('Moving closer to enemy');
+    self.log("Moving closer to enemy");
     return self.move(navigation.moveToTarget(self.me, e_bot, self.getPassableMap(), self.getVisibleRobotMap()));
   }
-  //otherwise, move far away from the castles
-  var options = navigation.buildable.filter((d) => {
-      return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
+  // otherwise, move far away from the castles
+  const options = navigation.buildable.filter((d) => {
+    return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
   });
-  var d = 0;
-  var option = options[0];
+  let d = 0;
+  let option = options[0];
   for (let i = 0; i < options.length; i++) {
-    var newD = 0;
+    let newD = 0;
     if (o_castles.length > 0) {
       newD = navigation.Distance(navigation.applyDir(self.me, options[i]), o_castles[0]);
     } else {
@@ -105,13 +104,12 @@ prophet.takeTurn = (self) => {
       option = options[i];
     }
   }
-  self.log('Moving');
-  //get random choice number
+  self.log("Moving");
+  // get random choice number
   const choice = Math.floor(Math.random() * options.length);
   if (Math.floor(Math.random())) {
     return self.move(option.x, option.y);
   }
   return self.move(options[choice].x, options[choice].y);
-
 };
 export default prophet;
