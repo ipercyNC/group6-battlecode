@@ -57,6 +57,11 @@ pilgrim.takeTurn = (self) => {
   const visibleRobotMap = self.getVisibleRobotMap();
   for (let y = 0; y < visibleRobotMap.length; y++) {
     for (let x = 0; x < visibleRobotMap[y].length; x++) {
+      // if we see a castle, its probably closer to our destination resource tile so save its location
+      if (self.getRobot(visibleRobotMap[y][x]).unit === Constants.CASTLE) {
+        self.castle = [y, x];
+      }
+
       if (self.resourceMap[y][x].type !== Constants.EMPTY) {
         // find the relevant resource tile
         let index = -1;
@@ -76,12 +81,6 @@ pilgrim.takeTurn = (self) => {
     }
   }
 
-  // if we see a castle, its probably closer to our destination resource tile so save its location
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].unit === Constants.CASTLE) {
-      self.castle = [bots[i].x, bots[i].y];
-    }
-  }
 
   // mine resource if carrying space and on its tile
   if (self.resourceTile !== -1) {

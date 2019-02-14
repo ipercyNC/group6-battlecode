@@ -264,53 +264,70 @@ const CASTLE = 0;
 
 const KARBONITE = "KARBONITE";
 const FUEL = "FUEL";
+const EMPTY = "EMPTY";
 
 const RESOURCE_TILE_BUSY = "BUSY";
 const RESOURCE_TILE_READY = "READY";
-
-const IDEAL_FUEL_TO_KARB_RATIO = 4;
 
 const AT_TARGET = "AT_TARGET";
 const TRAPPED = "TRAPPED";
 
 const prophet = {};
 
+const tileIsPorced = (x, y, self) => {
+  const botMap = self.getVisibleRobotMap();
+  if (botMap[y][x] > 0) {
+    const bot = self.getRobot(botMap[y][x]).unit;
+    if (bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const getPorcDestination = (self) => {
-  let x = self.castle[0];
-  let y = self.castle[1];
+  const cX = self.me.x; // center x
+  const cY = self.me.y; // center y
 
-  const maxWidth = self.map[0].length;
+  const GRID_SPACE = 1;
 
-  // this isn't quite a spiral but it's close enough
-  for (let i = 1; i < maxWidth; i += 3) { // i is the radius of the spiral
-    for (let dY = -i; dY <= i; dY += 3) {
-      for (let dX = -i; dX <= i; dX += 3) {
-        if ((dX === -i || dX === i) || (dY === -i || dY === i)) {
-          x = self.castle[0] + dX;
-          y = self.castle[1] + dY;
-          if (self._coordIsValid(x, y)) {
-            if (self.map[y][x]) { // check that the tile isn't impassable
-              if (!self.karbonite_map[y][x] && !self.fuel_map[y][x]) { // don't stand on resource tiles
-                let occupied = false;
-                const bots = self.getVisibleRobots();
-                for (let j = 0; j < bots.length; j++) {
-                  if (bots[j].x === x && bots[j].y === y) {
-                    occupied = true;
-                  }
-                }
-                if (!occupied) {
-                  self.log("Porc Dest: " + x + " " + y);
-                  return [x, y];
-                }
-              }
-            }
-          }
+  // create a map of distances from our castle to available porc tiles
+  const botMap = self.getVisibleRobotMap();
+  const porcMap = [];
+  for (let y = 0; y < botMap.length; y++) {
+    const row = [];
+    for (let x = 0; x < botMap[y].length; x++) {
+      if (x % (GRID_SPACE + 1) === 0 && y % (GRID_SPACE + 1) === 0) {
+        if ((tileIsPorced(x, y, self)) || // can't build porc if there's already porc there
+          (self.karbonite_map[y][x]) || // don't build on karb
+          (self.fuel_map[y][x]) || // or fuel
+          (!self.map[y][x]) // can't build on a wall
+        ) {
+          row.push(99999);
+        } else {
+          row.push((x - cX) ** 2 + (y - cY) ** 2);
         }
+      } else {
+        row.push(99999);
+      }
+    }
+    porcMap.push(row);
+  }
+
+  // pick the closest open tile
+  let bX = 0;
+  let bY = 0;
+  for (let y = 0; y < porcMap.length; y++) {
+    for (let x = 0; x < porcMap[y].length; x++) {
+      if (porcMap[y][x] < porcMap[bY][bX]) {
+        bX = x;
+        bY = y;
       }
     }
   }
 
-  return [-1, -1];
+  return [bX, bY];
 };
 
 prophet.takeTurn = (self) => {
@@ -329,22 +346,30 @@ prophet.takeTurn = (self) => {
     self.porcDestination = getPorcDestination(self);
   }
 
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].team !== self.me.team) {
+      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.PROPHET].ATTACK_RADIUS) {
+        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+      }
+    }
+  }
+
   if (self.inTransit) {
     if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+      // if we're at our dest then stop moving
+      // if someone got there first then pick a new dest
       const botMap = self.getVisibleRobotMap();
       if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
-        if (botMap[self.porcDestination[1]][self.porcDestination[0]] !== self.me.id) {
-          self.porcDestination = getPorcDestination(self);
-        } else {
+        if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
           self.inTransit = false;
+        } else if (tileIsPorced(self.porcDestination[0], self.porcDestination[1], self)) {
+          self.porcDestination = getPorcDestination(self);
         }
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
         return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
       }
-    } else {
-      self.porcDestination = getPorcDestination(self);
     }
   }
 
@@ -388,6 +413,20 @@ const castle = {};
 castle.takeTurn = (self) => {
   self.step++;
 
+  if (self.infant) {
+    self.infant = false;
+
+    for (let dY = -4; dY <= 4; dY++) {
+      for (let dX = -4; dX <= 4; dX++) {
+        if (self._coordIsValid(self.me.x + dX, self.me.y + dY)) {
+          if (self.karbonite_map[self.me.y + dY][self.me.x + dX] || self.fuel_map[self.me.y + dY][self.me.x + dX]) {
+            self.nNearbyResources++;
+          }
+        }
+      }
+    }
+  }
+
   // get all robots within range
   const enemiesInRange = self.getVisibleRobots().filter((robot) => {
     const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
@@ -424,8 +463,9 @@ castle.takeTurn = (self) => {
     }
   }
 
-  // build a pilgrim for the first two turns
-  if (self.step <= 2) {
+  // priority build a pilgrim for all of the resources within four tiles of the castle
+  if (self.step <= self.nNearbyResources) {
+    // return buildOnRandomEmptyTile(SPECS.PROPHET, self);
     return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
   }
 
@@ -447,8 +487,13 @@ const resourceMapToArray = (map) => {
   const resourceTiles = [];
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
-      if (map[y][x]) { // has resource
-        resourceTiles.push({ x, y, state: RESOURCE_TILE_READY });
+      if (map[y][x] !== EMPTY) { // has resource
+        resourceTiles.push({
+          x,
+          y,
+          state: RESOURCE_TILE_READY,
+          type: map[y][x],
+        });
       }
     }
   }
@@ -461,14 +506,23 @@ pilgrim.takeTurn = (self) => {
   // save important info on the first cycle of each trip
   if (self.infant) {
     self.infant = false;
-    // pick a resource type based on stashes
-    if (self.fuel >= self.karbonite * IDEAL_FUEL_TO_KARB_RATIO) {
-      self.resource = KARBONITE;
-      self.resourceMap = self.karbonite_map;
-    } else {
-      self.resource = FUEL;
-      self.resourceMap = self.fuel_map;
+
+    // merge the resource maps together
+    self.resourceMap = [];
+    for (let y = 0; y < self.karbonite_map.length; y++) {
+      const row = [];
+      for (let x = 0; x < self.karbonite_map[y].length; x++) {
+        if (self.karbonite_map[y][x]) {
+          row.push(KARBONITE);
+        } else if (self.fuel_map[y][x]) {
+          row.push(FUEL);
+        } else {
+          row.push(EMPTY);
+        }
+      }
+      self.resourceMap.push(row);
     }
+
     self.resourceTiles = resourceMapToArray(self.resourceMap);
 
     // this will be recalculated each round
@@ -481,7 +535,7 @@ pilgrim.takeTurn = (self) => {
   const visibleRobotMap = self.getVisibleRobotMap();
   for (let y = 0; y < visibleRobotMap.length; y++) {
     for (let x = 0; x < visibleRobotMap[y].length; x++) {
-      if (self.resourceMap[y][x]) {
+      if (self.resourceMap[y][x].type !== EMPTY) {
         // find the relevant resource tile
         let index = -1;
         for (let j = 0; j < self.resourceTiles.length; j++) {
@@ -510,12 +564,12 @@ pilgrim.takeTurn = (self) => {
   // mine resource if carrying space and on its tile
   if (self.resourceTile !== -1) {
     if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
-      if (self.resource === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-        //  self.log("Mine karb");
+      if (self.resourceTiles[self.resourceTile].type === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+        // self.log("Mine karb");
         return self.mine();
       }
-      if (self.resource === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
-        //  self.log("Mine fuel");
+      if (self.resourceTiles[self.resourceTile].type === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+        // self.log("Mine fuel");
         return self.mine();
       }
     }
@@ -526,14 +580,14 @@ pilgrim.takeTurn = (self) => {
 
   if (self.resourceTile !== -1) {
     // move to karb
-    if (self.resource === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-      //  self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+    if (self.resourceTiles[self.resourceTile].type === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+      // self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
       return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
 
     // move to fuel
-    if (self.resource === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
-      //self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+    if (self.resourceTiles[self.resourceTile].type === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+      // self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
       return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
   }
@@ -543,76 +597,123 @@ pilgrim.takeTurn = (self) => {
   if ((self.me.x >= self.castle[0] - 1) && (self.me.x <= self.castle[0] + 1) && (self.me.y >= self.castle[1] - 1) && (self.me.y <= self.castle[1] + 1)) {
     const dX = self.castle[0] - self.me.x;
     const dY = self.castle[1] - self.me.y;
-    //self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.castle[0] + " " + self.castle[1] + "  " + dX + " " + dY);
+    // self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.castle[0] + " " + self.castle[1] + "  " + dX + " " + dY);
 
     self.infant = true;
     return self.give(dX, dY, self.me.karbonite, self.me.fuel);
   }
 
   // go back home
-  //self.log("Going home");
+  // self.log("Going home");
   return self.sanitizeRet(self.moveAdjacentToTarget(self.castle[0], self.castle[1]));
 };
 
-const navigation = {};
-
-navigation.dirMove = (self, destination) => {
-  // self.log("destx " + destination[0] + "dy " + destination[1]);
-  // self.log("selfx " + self.me.x + "selfy " + self.me.y);
-  let dx = destination[0] - self.me.x;
-  let dy = destination[1] - self.me.y;
-  if (dx < 0) {
-    dx = -1;
-  } else {
-    dx = 1;
-  }
-  if (dy < 0) {
-    dy = -1;
-  } else {
-    dy = 1;
-  }
-  // self.log("dx " + dx + "dy " + dy);
-  return [dx, dy];
-};
-
-navigation.basicMove = (self, destination) => {
-  // self.log("destx " + destination[0] + "dy " + destination[1]);
-  return [destination[0], destination[1]];
-};
-
 const crusader = {};
-crusader.takeTurn = (self) => {
-  // make directional choice - either given by castle? or enemy?
-  const visible = self.getVisibleRobots();
 
-  // get attackable robots
-  const attackable = visible.filter((r) => {
-    if (!self.isVisible(r)) {
-      return false;
-    }
-
-    const dist = Math.pow((r.x - self.me.x), 2) + Math.pow((r.y - self.me.y), 2);
-    if (r.team !== self.me.team &&
-      SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist &&
-      dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1]) {
+const tileIsPorced$1 = (x, y, self) => {
+  const botMap = self.getVisibleRobotMap();
+  if (botMap[y][x] > 0) {
+    const bot = self.getRobot(botMap[y][x]).unit;
+    if (bot === SPECS.CRUSADER || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
       return true;
     }
-    return false;
-  });
-  if (attackable.length > 0) {
-    // attack first robot
-    const r = attackable[0];
-    // self.log("" + r);
-    // self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
-    return self.attack(r.x - self.me.x, r.y - self.me.y);
   }
 
-  // make random move to start
-  const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-  const choice = choices[Math.floor(Math.random() * choices.length)];
-  const target = navigation.basicMove(self, choice);
-  // self.log("trying to move to " + target);
-  return self.move(target[0], target[1]);
+  return false;
+};
+
+const getPorcDestination$1 = (self) => {
+  const cX = self.me.x; // center x
+  const cY = self.me.y; // center y
+
+  const GRID_SPACE = 1;
+
+  // create a map of distances from our castle to available porc tiles
+  const botMap = self.getVisibleRobotMap();
+  const porcMap = [];
+  for (let y = 0; y < botMap.length; y++) {
+    const row = [];
+    let offset = 0;
+    if (y % 2 === 0) {
+      offset = 1;
+    }
+    for (let x = 0; x < botMap[y].length; x++) {
+      if ((x - offset) % (GRID_SPACE + 1) === 0) {
+        if ((tileIsPorced$1(x, y, self)) || // can't build porc if there's already porc there
+          (self.karbonite_map[y][x]) || // don't build on karb
+          (self.fuel_map[y][x]) || // or fuel
+          (!self.map[y][x]) // can't build on a wall
+        ) {
+          row.push(99999);
+        } else {
+          row.push((x - cX) ** 2 + (y - cY) ** 2);
+        }
+      } else {
+        row.push(99999);
+      }
+    }
+    porcMap.push(row);
+  }
+
+  // pick the closest open tile
+  let bX = 0;
+  let bY = 0;
+  for (let y = 0; y < porcMap.length; y++) {
+    for (let x = 0; x < porcMap[y].length; x++) {
+      if (porcMap[y][x] < porcMap[bY][bX]) {
+        bX = x;
+        bY = y;
+      }
+    }
+  }
+
+  return [bX, bY];
+};
+
+crusader.takeTurn = (self) => {
+  const bots = self.getVisibleRobots();
+
+  if (self.infant) {
+    self.infant = false;
+
+    // save the first castle we see as our porc center to align the grid
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].unit === SPECS.CASTLE) {
+        self.castle = [bots[i].x, bots[i].y];
+      }
+    }
+
+    self.porcDestination = getPorcDestination$1(self);
+  }
+
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].team !== self.me.team) {
+      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS) {
+        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+      }
+    }
+  }
+
+  if (self.inTransit) {
+    if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+      // if we're at our dest then stop moving
+      // if someone got there first then pick a new dest
+      const botMap = self.getVisibleRobotMap();
+      if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
+        if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
+          self.inTransit = false;
+        } else if (tileIsPorced$1(self.porcDestination[0], self.porcDestination[1], self)) {
+          self.porcDestination = getPorcDestination$1(self);
+        }
+      }
+
+      if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
+      }
+    }
+  }
+
+  return null;
 };
 
 // eslint-disable-next-line no-unused-vars
@@ -634,14 +735,18 @@ class MyRobot extends BCAbstractRobot {
     this.porcDestination = [-1, -1];
     this.inTransit = true;
 
+    // crusader
+    this.stashDest = [-1, -1];
+
     // castle
     this.step = 0;
+    this.nNearbyResources = 0;
     this.buildIndex = 0;
     this.buildCycle = [
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
       SPECS.PILGRIM,
     ];
 
@@ -706,6 +811,26 @@ class MyRobot extends BCAbstractRobot {
     }
   }
 
+  coordIsAdjacentToResource(x, y) {
+    const maxX = this.karbonite_map[0].length - 1;
+    const maxY = this.karbonite_map.length - 1;
+    const minX = 0;
+    const minY = 0;
+    if (
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x - 1]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x - 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 0]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 0])
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   _coordIsValid(x, y) {
     if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
       return true;
@@ -722,7 +847,17 @@ class MyRobot extends BCAbstractRobot {
     }
 
 
-    const opts = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1]];
+    const opts = [
+      [-1, -1],
+      [-1, 0],
+      [-1, 1],
+      [0, -1],
+      [0, 0],
+      [0, 1],
+      [1, -1],
+      [1, 0],
+      [1, 1]
+    ];
     const opt = opts[Math.floor(Math.random() * opts.length)];
     return this.moveToTarget(tX + opt[0], tY + opt[1]);
   }
@@ -783,7 +918,9 @@ class MyRobot extends BCAbstractRobot {
 
     // no legal movements -- robot is trapped and needs to backtrack
     if (dists[bY][bX] === 9999) {
-      this.traversedTiles = [[this.me.x, this.me.y]];
+      this.traversedTiles = [
+        [this.me.x, this.me.y]
+      ];
       return TRAPPED;
     }
 
@@ -796,6 +933,14 @@ class MyRobot extends BCAbstractRobot {
       this.traversedTiles = [];
     } else {
       this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x + 0, this.me.y + 1]);
+      this.traversedTiles.push([this.me.x + 0, this.me.y - 1]);
+      this.traversedTiles.push([this.me.x + 1, this.me.y + 0]);
+      this.traversedTiles.push([this.me.x - 1, this.me.y + 0]);
     }
 
     return this.move(dX, dY);
@@ -818,5 +963,4 @@ class MyRobot extends BCAbstractRobot {
     return closest;
   }
 }
-
 var robot = new MyRobot();

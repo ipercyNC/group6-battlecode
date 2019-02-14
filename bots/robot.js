@@ -24,15 +24,18 @@ class MyRobot extends BCAbstractRobot {
     this.porcDestination = [-1, -1];
     this.inTransit = true;
 
+    // crusader
+    this.stashDest = [-1, -1];
+
     // castle
     this.step = 0;
     this.nNearbyResources = 0;
     this.buildIndex = 0;
     this.buildCycle = [
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
       SPECS.PILGRIM,
     ];
 
@@ -142,7 +145,7 @@ class MyRobot extends BCAbstractRobot {
       [0, 1],
       [1, -1],
       [1, 0],
-      [1, 1]
+      [1, 1],
     ];
     const opt = opts[Math.floor(Math.random() * opts.length)];
     return this.moveToTarget(tX + opt[0], tY + opt[1]);
@@ -205,7 +208,7 @@ class MyRobot extends BCAbstractRobot {
     // no legal movements -- robot is trapped and needs to backtrack
     if (dists[bY][bX] === 9999) {
       this.traversedTiles = [
-        [this.me.x, this.me.y]
+        [this.me.x, this.me.y],
       ];
       return Constants.TRAPPED;
     }
