@@ -4,12 +4,6 @@ import * as Constants from "./constants.js";
 const crusader = {};
 
 const tileIsPorced = (x, y, self) => {
-  // don't porc next to bases cuz they'll get walled in
-  if (self.adjacentToBase(x, y)) {
-    return true;
-  }
-
-
   const botMap = self.getVisibleRobotMap();
   if (botMap[y][x] > 0) {
     const bot = self.getRobot(botMap[y][x]).unit;
@@ -103,10 +97,6 @@ crusader.takeTurn = (self) => {
     }
   }
 
-  if (self.moving) {
-    return self.continueMovement();
-  }
-
   if (self.inTransit) {
     if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
       // if we're at our dest then stop moving
@@ -120,7 +110,7 @@ crusader.takeTurn = (self) => {
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-        self.moveToTarget(self.porcDestination[0], self.porcDestination[1]);
+        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
       }
     }
   }

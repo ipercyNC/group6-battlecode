@@ -1,37 +1,5 @@
 import { SPECS } from "battlecode";
 
-const haveResourcesToBuild = (unit, self) => {
-  if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
-    return true;
-  }
-  return false;
-};
-
-const buildOnRandomEmptyTile = (unit, self) => {
-  if (haveResourcesToBuild(unit, self)) {
-    const validTiles = [];
-    const botMap = self.getVisibleRobotMap();
-    for (let dY = -1; dY <= 1; dY++) {
-      for (let dX = -1; dX <= 1; dX++) {
-        const x = self.me.x + dX;
-        const y = self.me.y + dY;
-        if (self._coordIsValid(x, y)) {
-          if (self.map[y][x] && botMap[y][x] === 0) {
-            validTiles.push({ dX, dY });
-          }
-        }
-      }
-    }
-
-    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
-    if (tile !== undefined) {
-      return self.buildUnit(unit, tile.dX, tile.dY);
-    }
-  }
-  return null;
-};
-
-
 const castle = {};
 
 castle.takeTurn = (self) => {
@@ -50,6 +18,7 @@ castle.takeTurn = (self) => {
       }
     }
   }
+
 
   // get all robots within range
   const enemiesInRange = self.getVisibleRobots().filter((robot) => {
@@ -90,16 +59,16 @@ castle.takeTurn = (self) => {
   // priority build a pilgrim for all of the resources within four tiles of the castle
   if (self.step <= self.nNearbyResources) {
     // return buildOnRandomEmptyTile(SPECS.PROPHET, self);
-    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
+    return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
   }
 
   const unit = self.buildCycle[self.buildIndex];
-  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
+  if (self.haveResourcesToBuild(unit) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
     self.buildIndex++;
     if (self.buildIndex >= self.buildCycle.length) {
       self.buildIndex = 0;
     }
-    return buildOnRandomEmptyTile(unit, self);
+    return self.buildOnRandomEmptyTile(unit);
   }
 };
 

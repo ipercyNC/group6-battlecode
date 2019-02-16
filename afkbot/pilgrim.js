@@ -23,6 +23,7 @@ const resourceMapToArray = (map) => {
 };
 
 pilgrim.takeTurn = (self) => {
+
   // save important info on the first cycle of each trip
   if (self.infant) {
     self.infant = false;
@@ -53,17 +54,12 @@ pilgrim.takeTurn = (self) => {
   // tiles in vision without robots get set to ready
   // tiles in vision with robots get set to busy
   const visibleRobotMap = self.getVisibleRobotMap();
-  let visibleBase = false;
   for (let y = 0; y < visibleRobotMap.length; y++) {
     for (let x = 0; x < visibleRobotMap[y].length; x++) {
       // if we see a castle, its probably closer to our destination resource tile so save its location
       const bot = self.getRobot(visibleRobotMap[y][x]);
-      if (bot !== null && (bot.unit === Constants.CASTLE || bot.unit === SPECS.CHURCH)) {
-        self.castle = [x, y];
-        const dist = ((bot.x - self.me.x) ** 2 + (bot.y - self.me.y) ** 2) ** 0.5
-        if (dist < 6) {
-          visibleBase = true;
-        }
+      if (bot !== null && bot.unit === Constants.CASTLE) {
+        self.castle = [y, x];
       }
 
       if (self.resourceMap[y][x].type !== Constants.EMPTY) {
@@ -75,7 +71,7 @@ pilgrim.takeTurn = (self) => {
           }
         }
         if (index >= 0) {
-          if (visibleRobotMap[y][x] === 0 || visibleRobotMap[y][x] === self.me.id) {
+          if (visibleRobotMap[y][x] === 0) {
             self.resourceTiles[index].state = Constants.RESOURCE_TILE_READY;
           } else if (visibleRobotMap[y][x] > 0) {
             self.resourceTiles[index].state = Constants.RESOURCE_TILE_BUSY;
@@ -85,65 +81,35 @@ pilgrim.takeTurn = (self) => {
     }
   }
 
-  // check to see if we should build a church
-  // only build a church if there's none nearby and there's a nearby resource patch
-  if (!visibleBase) {
-    self.log("no base nearby");
-    let nearbyPatches = 0;
-    for (let i = 0; i < self.resourceTiles.length; i++) {
-      const dist = ((self.resourceTiles[i].x - self.me.x) ** 2 + (self.resourceTiles[i].y - self.me.y) ** 2) ** 0.5;
-      if (dist < 6) {
-        nearbyPatches++;
-      }
-    }
-    if (nearbyPatches >= 2) {
-      self.log("################################");
-      self.log("BUILD CHURCH")
-      self.log("################################");
-      return self.buildOnRandomEmptyTile(SPECS.CHURCH);
-    }
-  }
-
 
   // mine resource if carrying space and on its tile
   if (self.resourceTile !== -1) {
     if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
       if (self.resourceTiles[self.resourceTile].type === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-        self.log("Mine karb");
+        // self.log("Mine karb");
         return self.mine();
       }
       if (self.resourceTiles[self.resourceTile].type === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-        self.log("Mine fuel");
+        // self.log("Mine fuel");
         return self.mine();
       }
     }
   }
 
   // pick the nearest available resource
-  // if it's the same one as our current one just keep moving to it
-  // otherwise switch to the new one
-  const newResourceTile = self.getClosestReadyResource(self.resourceTiles);
-  if (newResourceTile !== -1) {
-    if (self.resourceTiles[newResourceTile].x === self.resourceTile.x && self.resourceTiles[newResourceTile].y === self.resourceTile.y) {
-      if (self.moving) {
-        return self.continueMovement();
-      }
-    } else {
-      self.resourceTile = newResourceTile;
-    }
-  }
+  self.resourceTile = self.getClosestReadyResource(self.resourceTiles);
 
   if (self.resourceTile !== -1) {
     // move to karb
     if (self.resourceTiles[self.resourceTile].type === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-      self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
+      // self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
 
     // move to fuel
     if (self.resourceTiles[self.resourceTile].type === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-      self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
+      // self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
     }
   }
 
@@ -159,10 +125,8 @@ pilgrim.takeTurn = (self) => {
   }
 
   // go back home
-  self.log("Going home");
-  self.moveAdjacentToTarget(self.castle[0], self.castle[1]);
-
-  return null;
+  // self.log("Going home");
+  return self.sanitizeRet(self.moveAdjacentToTarget(self.castle[0], self.castle[1]));
 };
 
 export default pilgrim;
