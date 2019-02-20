@@ -1,4 +1,4 @@
-import { SPECS } from "battlecode";
+import { BCAbstractRobot,SPECS } from "battlecode";
 
 const haveResourcesToBuild = (unit, self) => {
   if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {

@@ -75,7 +75,26 @@ prophet.takeTurn = (self) => {
       self.porcDestination = getPorcDestination(self);
     }
   }
+  const attackable = visible.filter((r) => {
+    if (!self.isVisible(r)) {
+      return false;
+    }
 
+    const dist = (r.x - self.me.x)** 2 + (r.y - self.me.y)**2;
+    if (r.team !== self.me.team &&
+      SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist &&
+      dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1]) {
+      return true;
+    }
+    return false;
+  });
+  if (attackable.length > 0) {
+    // attack first robot
+    const r = attackable[0];
+    // self.log("" + r);
+    // self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
+    return self.attack(r.x - self.me.x, r.y - self.me.y);
+  }
   return null;
 };
 export default prophet;

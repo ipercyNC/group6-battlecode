@@ -151,7 +151,7 @@ class MyRobot extends BCAbstractRobot {
           if (terrain[y][x] === false) {
             row.push(9999);
           } else {
-            row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
+            row.push(Math.pow(Math.pow(((x - tX),2) + Math.pow((y - tY),2),0.5)));
           }
         } else {
           row.push(9999);
@@ -197,7 +197,7 @@ class MyRobot extends BCAbstractRobot {
     let bestDist = 99999;
     for (let i = 0; i < tiles.length; i++) {
       if (tiles[i].state === Constants.RESOURCE_TILE_READY) {
-        const dist = (tiles[i].x - this.me.x) ** 2 + (tiles[i].y - this.me.y) ** 2;
+        const dist = Math.pow((tiles[i].x - this.me.x),2) + Math.pow((tiles[i].y - this.me.y),2);
         if (dist < bestDist) {
           closest = i;
           bestDist = dist;
