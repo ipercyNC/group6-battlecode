@@ -6,6 +6,8 @@ import crusader from "./crusader.js";
 import * as Constants from "./constants.js";
 import BinaryHeap from "./binaryHeap.js";
 
+
+
 // eslint-disable-next-line no-unused-lets
 class MyRobot extends BCAbstractRobot {
   constructor() {
