@@ -269,8 +269,11 @@ const EMPTY = "EMPTY";
 const RESOURCE_TILE_BUSY = "BUSY";
 const RESOURCE_TILE_READY = "READY";
 
-const AT_TARGET = "AT_TARGET";
-const TRAPPED = "TRAPPED";
+const STATUS_IDLE = 0;
+const STATUS_BUILDING = STATUS_IDLE + 1;
+const STATUS_MINING = STATUS_BUILDING + 1;
+const STATUS_MOVING = STATUS_MINING + 1;
+const STATUS_ATTACKING = STATUS_MOVING + 1;
 
 const prophet = {};
 
@@ -376,38 +379,6 @@ prophet.takeTurn = (self) => {
   return null;
 };
 
-const haveResourcesToBuild = (unit, self) => {
-  if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
-    return true;
-  }
-  return false;
-};
-
-const buildOnRandomEmptyTile = (unit, self) => {
-  if (haveResourcesToBuild(unit, self)) {
-    const validTiles = [];
-    const botMap = self.getVisibleRobotMap();
-    for (let dY = -1; dY <= 1; dY++) {
-      for (let dX = -1; dX <= 1; dX++) {
-        const x = self.me.x + dX;
-        const y = self.me.y + dY;
-        if (self._coordIsValid(x, y)) {
-          if (self.map[y][x] && botMap[y][x] === 0) {
-            validTiles.push({ dX, dY });
-          }
-        }
-      }
-    }
-
-    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
-    if (tile !== undefined) {
-      return self.buildUnit(unit, tile.dX, tile.dY);
-    }
-  }
-  return null;
-};
-
-
 const castle = {};
 
 castle.takeTurn = (self) => {
@@ -415,7 +386,6 @@ castle.takeTurn = (self) => {
 
   if (self.infant) {
     self.infant = false;
-
     for (let dY = -4; dY <= 4; dY++) {
       for (let dX = -4; dX <= 4; dX++) {
         if (self._coordIsValid(self.me.x + dX, self.me.y + dY)) {
@@ -425,6 +395,64 @@ castle.takeTurn = (self) => {
         }
       }
     }
+  }
+
+  // update our robots list
+  self.robots = self.getVisibleRobots();
+  for (let i = 0; i < self.robots.length; i++) {
+    if (self.robots[i].unit === SPECS.CRUSADER) ;
+  }
+
+  if (self.step === 200) {
+
+    self.signal(29698, self.map.length ** 2);
+    return null;
+
+    // pick the radius that is guaranteed to cover the whole map
+    const radiuses = [
+      ((self.me.x - 0) ** 2 + (self.me.y - 0) ** 2) ** 0.5,
+      ((self.me.x - self.map[0].length) ** 2 + (self.me.y - self.map.length) ** 2) ** 0.5,
+      ((self.me.x - self.map[0].length) ** 2 + (self.me.y) ** 2) ** 0.5,
+      ((self.me.x) ** 2 + (self.me.y - self.map.length) ** 2) ** 0.5,
+    ];
+
+    let radius = 0;
+    for (let i = 0; i < radiuses.length; i++) {
+      if (radiuses[i] > radius) {
+        radius = radiuses[i];
+      }
+    }
+
+    // figure out how the map is mirrored
+    let mirroredVertically = true;
+    for (let i = 0; i < self.map.length / 2; i++) {
+      if (self.map[0][i] !== self.map[0][i + self.map.length / 2]) {
+        mirroredVertically = false;
+      }
+    }
+
+    // select a target by mirroring our location over
+    const enemyCoords = { x: self.me.x, y: self.me.y };
+
+    if (!mirroredVertically) {
+      if (self.me.x > self.map.length / 2) {
+        enemyCoords.x = self.me.x - self.map.length / 2;
+      } else {
+        enemyCoords.x = self.map.length / 2 - self.me.x;
+      }
+    } else if (mirroredVertically) {
+      if (self.me.y > self.map.length / 2) {
+        enemyCoords.y = self.me.y - self.map.length / 2;
+      } else {
+        enemyCoords.y = self.map.length / 2 - self.me.x;
+      }
+    }
+
+    // calculate our signal
+    const signal = enemyCoords.x * 256 + enemyCoords.y;
+
+    // signal to everything on the map to target that enemy
+    self.signal(signal, radius);
   }
 
   // get all robots within range
@@ -466,17 +494,17 @@ castle.takeTurn = (self) => {
   // priority build a pilgrim for all of the resources within four tiles of the castle
   if (self.step <= self.nNearbyResources) {
     // return buildOnRandomEmptyTile(SPECS.PROPHET, self);
-    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
+    return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
   }
 
-  const unit = self.buildCycle[self.buildIndex];
-  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
-    self.buildIndex++;
-    if (self.buildIndex >= self.buildCycle.length) {
-      self.buildIndex = 0;
-    }
-    return buildOnRandomEmptyTile(unit, self);
-  }
+  //const unit = self.buildCycle[self.buildIndex];
+  //if (self.haveResourcesToBuild(unit) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
+  //  self.buildIndex++;
+  //  if (self.buildIndex >= self.buildCycle.length) {
+  //    self.buildIndex = 0;
+  //  }
+  //  return self.buildOnRandomEmptyTile(unit);
+  //}
 };
 
 const pilgrim = {};
@@ -501,8 +529,6 @@ const resourceMapToArray = (map) => {
 };
 
 pilgrim.takeTurn = (self) => {
-  const bots = self.getVisibleRobots();
-
   // save important info on the first cycle of each trip
   if (self.infant) {
     self.infant = false;
@@ -533,8 +559,19 @@ pilgrim.takeTurn = (self) => {
   // tiles in vision without robots get set to ready
   // tiles in vision with robots get set to busy
   const visibleRobotMap = self.getVisibleRobotMap();
+  let visibleBase = false;
   for (let y = 0; y < visibleRobotMap.length; y++) {
     for (let x = 0; x < visibleRobotMap[y].length; x++) {
+      // if we see a castle, its probably closer to our destination resource tile so save its location
+      const bot = self.getRobot(visibleRobotMap[y][x]);
+      if (bot !== null && (bot.unit === CASTLE || bot.unit === SPECS.CHURCH)) {
+        self.castle = [x, y];
+        const dist = ((bot.x - self.me.x) ** 2 + (bot.y - self.me.y) ** 2) ** 0.5;
+        if (dist < 6) {
+          visibleBase = true;
+        }
+      }
+
       if (self.resourceMap[y][x].type !== EMPTY) {
         // find the relevant resource tile
         let index = -1;
@@ -544,7 +581,7 @@ pilgrim.takeTurn = (self) => {
           }
         }
         if (index >= 0) {
-          if (visibleRobotMap[y][x] === 0) {
+          if (visibleRobotMap[y][x] === 0 || visibleRobotMap[y][x] === self.me.id) {
             self.resourceTiles[index].state = RESOURCE_TILE_READY;
           } else if (visibleRobotMap[y][x] > 0) {
             self.resourceTiles[index].state = RESOURCE_TILE_BUSY;
@@ -554,41 +591,62 @@ pilgrim.takeTurn = (self) => {
     }
   }
 
-  // if we see a castle, its probably closer to our destination resource tile so save its location
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].unit === CASTLE) {
-      self.castle = [bots[i].x, bots[i].y];
+  // check to see if we should build a church
+  // only build a church if there's none nearby and there's a nearby resource patch
+  if (!visibleBase) {
+    //self.log("no base nearby");
+    let nearbyPatches = 0;
+    for (let i = 0; i < self.resourceTiles.length; i++) {
+      const dist = ((self.resourceTiles[i].x - self.me.x) ** 2 + (self.resourceTiles[i].y - self.me.y) ** 2) ** 0.5;
+      if (dist < 6) {
+        nearbyPatches++;
+      }
+    }
+    if (nearbyPatches >= 2) {
+      return self.buildOnRandomEmptyTile(SPECS.CHURCH);
     }
   }
+
 
   // mine resource if carrying space and on its tile
   if (self.resourceTile !== -1) {
     if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
       if (self.resourceTiles[self.resourceTile].type === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-        // self.log("Mine karb");
-        return self.mine();
+        //  self.log("Mine karb");
+        return self.harvest();
       }
       if (self.resourceTiles[self.resourceTile].type === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
-        // self.log("Mine fuel");
-        return self.mine();
+        //  self.log("Mine fuel");
+        return self.harvest();
       }
     }
   }
 
   // pick the nearest available resource
-  self.resourceTile = self.getClosestReadyResource(self.resourceTiles);
+  // if it's the same one as our current one just keep moving to it
+  // otherwise switch to the new one
+  const newResourceTile = self.getClosestReadyResource(self.resourceTiles);
+  if (newResourceTile !== -1) {
+    if (self.resourceTiles[newResourceTile].x === self.resourceTile.x && self.resourceTiles[newResourceTile].y === self.resourceTile.y) {
+      if (self.moving) {
+        return self.continueMovement();
+      }
+    } else {
+      self.resourceTile = newResourceTile;
+    }
+  }
 
   if (self.resourceTile !== -1) {
     // move to karb
     if (self.resourceTiles[self.resourceTile].type === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-      // self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
+      //self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
     }
 
     // move to fuel
     if (self.resourceTiles[self.resourceTile].type === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
-      // self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
-      return self.sanitizeRet(self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y));
+      //self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
     }
   }
 
@@ -604,13 +662,21 @@ pilgrim.takeTurn = (self) => {
   }
 
   // go back home
-  // self.log("Going home");
-  return self.sanitizeRet(self.moveAdjacentToTarget(self.castle[0], self.castle[1]));
+  //self.log("Going home");
+  self.moveAdjacentToTarget(self.castle[0], self.castle[1]);
+
+  return null;
 };
 
 const crusader = {};
 
 const tileIsPorced$1 = (x, y, self) => {
+  // don't porc next to bases cuz they'll get walled in
+  if (self.adjacentToBase(x, y)) {
+    return true;
+  }
+
+
   const botMap = self.getVisibleRobotMap();
   if (botMap[y][x] > 0) {
     const bot = self.getRobot(botMap[y][x]).unit;
@@ -686,19 +752,32 @@ crusader.takeTurn = (self) => {
     self.porcDestination = getPorcDestination$1(self);
   }
 
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].team !== self.me.team) {
-      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS) {
-        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+  const botMap = self.getVisibleRobotMap();
+  const minY = self.me.y - SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const maxY = self.me.y + SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const minX = self.me.x - SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const maxX = self.me.x + SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+
+
+  for (let y = minY; y < maxY; y++) {
+    for (let x = minX; x < maxX; x++) {
+      const bot = self.getRobot(botMap[y][x]);
+      if (bot.team !== self.me.team) {
+        if (((self.me.x - bot.x) ** 2 + (self.me.y - bot.y) ** 2) <= SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS) {
+          return self.shoot(bot.x - self.me.x, bot.y - self.me.y);
+        }
       }
     }
+  }
+
+  if (self.moving) {
+    return self.continueMovement();
   }
 
   if (self.inTransit) {
     if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
       // if we're at our dest then stop moving
       // if someone got there first then pick a new dest
-      const botMap = self.getVisibleRobotMap();
       if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
         if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
           self.inTransit = false;
@@ -708,7 +787,7 @@ crusader.takeTurn = (self) => {
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
+        self.moveToTarget(self.porcDestination[0], self.porcDestination[1]);
       }
     }
   }
@@ -716,13 +795,132 @@ crusader.takeTurn = (self) => {
   return null;
 };
 
-// eslint-disable-next-line no-unused-vars
+function BinaryHeap(scoreFunction) {
+  this.content = [];
+  this.scoreFunction = scoreFunction;
+}
+
+BinaryHeap.prototype = {
+  push: function (element) {
+    // Add the new element to the end of the array.
+    this.content.push(element);
+    // Allow it to bubble up.
+    this.bubbleUp(this.content.length - 1);
+  },
+
+  pop: function () {
+    // Store the first element so we can return it later.
+    var result = this.content[0];
+    // Get the element at the end of the array.
+    var end = this.content.pop();
+    // If there are any elements left, put the end element at the
+    // start, and let it sink down.
+    if (this.content.length > 0) {
+      this.content[0] = end;
+      this.sinkDown(0);
+    }
+    return result;
+  },
+
+  remove: function (node) {
+    var length = this.content.length;
+    // To remove a value, we must search through the array to find
+    // it.
+    for (var i = 0; i < length; i++) {
+      if (this.content[i] != node) continue;
+      // When it is found, the process seen in 'pop' is repeated
+      // to fill up the hole.
+      var end = this.content.pop();
+      // If the element we popped was the one we needed to remove,
+      // we're done.
+      if (i == length - 1) break;
+      // Otherwise, we replace the removed element with the popped
+      // one, and allow it to float up or sink down as appropriate.
+      this.content[i] = end;
+      this.bubbleUp(i);
+      this.sinkDown(i);
+      break;
+    }
+  },
+
+  size: function () {
+    return this.content.length;
+  },
+
+  bubbleUp: function (n) {
+    // Fetch the element that has to be moved.
+    var element = this.content[n],
+      score = this.scoreFunction(element);
+    // When at 0, an element can not go up any further.
+    while (n > 0) {
+      // Compute the parent element's index, and fetch it.
+      var parentN = Math.floor((n + 1) / 2) - 1,
+        parent = this.content[parentN];
+      // If the parent has a lesser score, things are in order and we
+      // are done.
+      if (score >= this.scoreFunction(parent))
+        break;
+
+      // Otherwise, swap the parent with the current element and
+      // continue.
+      this.content[parentN] = element;
+      this.content[n] = parent;
+      n = parentN;
+    }
+  },
+
+  sinkDown: function (n) {
+    // Look up the target element and its score.
+    var length = this.content.length,
+      element = this.content[n],
+      elemScore = this.scoreFunction(element);
+
+    while (true) {
+      // Compute the indices of the child elements.
+      var child2N = (n + 1) * 2,
+        child1N = child2N - 1;
+      // This is used to store the new position of the element,
+      // if any.
+      var swap = null;
+      // If the first child exists (is inside the array)...
+      if (child1N < length) {
+        // Look it up and compute its score.
+        var child1 = this.content[child1N],
+          child1Score = this.scoreFunction(child1);
+        // If the score is less than our element's, we need to swap.
+        if (child1Score < elemScore)
+          swap = child1N;
+      }
+      // Do the same checks for the other child.
+      if (child2N < length) {
+        var child2 = this.content[child2N],
+          child2Score = this.scoreFunction(child2);
+        if (child2Score < (swap == null ? elemScore : child1Score))
+          swap = child2N;
+      }
+
+      // No need to swap further, we are done.
+      if (swap == null) break;
+
+      // Otherwise, swap and continue.
+      this.content[n] = this.content[swap];
+      this.content[swap] = element;
+      n = swap;
+    }
+  }
+};
+
+// eslint-disable-next-line no-unused-lets
 class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
     // general
     this.infant = true;
     this.traversedTiles = [];
+    this.destination = null;
+    this.path = null;
+    this.tempDestination = null;
+    this.moving = false;
 
     // pilgrim
     this.resourceMap = null;
@@ -737,10 +935,18 @@ class MyRobot extends BCAbstractRobot {
 
     // crusader
     this.stashDest = [-1, -1];
+    this.attacking = false;
+    this.attackDest = [-1, -1];
 
     // castle
     this.step = 0;
+    this.location = null;
+    this.willBuild = false;
     this.nNearbyResources = 0;
+
+    this.robots = [];
+    this.buildLastTurn = false;
+
     this.buildIndex = 0;
     this.buildCycle = [
       SPECS.CRUSADER,
@@ -757,7 +963,33 @@ class MyRobot extends BCAbstractRobot {
     this.speed = -1;
   }
 
+  construct(unit, dX, dY) {
+    this.castleTalk(STATUS_BUILDING);
+    return this.buildUnit(unit, dX, dY);
+  }
+
+  harvest() {
+    this.castleTalk(STATUS_MINING);
+    return this.mine();
+  }
+
+  shoot(dX, dY) {
+    this.castleTalk(STATUS_ATTACKING);
+    return this.attack(dX, dY);
+  }
+
+  moveWrapper(dX, dY) {
+    this.castleTalk(STATUS_MOVING);
+    return this.move(dX, dY);
+  }
+
   turn() {
+    this.castleTalk(STATUS_IDLE); // will be overridden later, if necessary
+    this.sanityCheck();
+    if (this.moving) {
+      return this.continueMovement();
+    }
+
     if (this.myType === undefined) {
       switch (this.me.unit) {
         case SPECS.PROPHET:
@@ -780,7 +1012,129 @@ class MyRobot extends BCAbstractRobot {
           this.log("Unknown unit type" + this.me.unit);
       }
     }
-    return this.myType.takeTurn(this);
+    if (this.myType !== undefined) {
+      return this.myType.takeTurn(this);
+    }
+    return null;
+  }
+
+  sanityCheck() {
+    let insane = false;
+    if (this.location === null) {
+      this.location = { x: this.me.x, y: this.me.y };
+    }
+
+    // check if a castle or church moved
+    if (this.me.unit === SPECS.CASTLE || this.me.unit === SPECS.CHURCH) {
+      if (this.location.x !== this.me.x || this.location.y !== this.me.y) {
+        insane = true;
+      }
+    }
+
+    // check if a unit has negative fuel/karb
+    if (this.me.fuel < 0 || this.me.karbonite < 0) {
+      insane = true;
+    }
+
+    // check if our global fuel/karb pool is negative
+    if (this.fuel < 0 || this.karbonite < 0) {
+      insane = true;
+    }
+
+    // check if we're off the map
+    if (this.me.x < 0 || this.me.y < 0 || this.me.y >= this.map.length || this.me.x >= this.map[0].length) {
+      insane = true;
+    }
+
+    // check if we're standing in impassable terrain
+    if (!this.map[this.me.y][this.me.x]) {
+      insane = true;
+    }
+
+
+    if (insane) {
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("################################################################################");
+      this.log("#################                                              #################");
+      this.log("#######                                                                  #######");
+      this.log("####                          !! BUG DETECTED !!                            ####");
+      this.log("#######                                                                  #######");
+      this.log("#################                                              #################");
+      this.log("################################################################################");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+    }
+  }
+
+  // also adds in a buffer for churches in case pilgrims want to build them
+  haveResourcesToBuild(unit) {
+    if (this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 && this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200) {
+      return true;
+    }
+    return false;
+  }
+
+  adjacentToBase(x, y) {
+    const maxX = this.map[0].length - 1;
+    const maxY = this.map.length - 1;
+    const minX = 0;
+    const minY = 0;
+
+    const adjacentUnits = [];
+
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        if (x + dX >= minX && x + dX <= maxX && minY + dY >= 0 && y + dY <= maxY) {
+          adjacentUnits.push(this.getRobot(this.getVisibleRobotMap()[y + dY][x + dX]));
+        }
+      }
+    }
+
+    for (let i = 0; i < adjacentUnits.length; i++) {
+      if (adjacentUnits[i] !== null) {
+        if (adjacentUnits[i].unit === SPECS.CASTLE || adjacentUnits[i].unit === SPECS.CHURCH) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  buildOnRandomEmptyTile(unit) {
+    const validTiles = [];
+    const botMap = this.getVisibleRobotMap();
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = this.me.x + dX;
+        const y = this.me.y + dY;
+        if (this._coordIsValid(x, y)) {
+          if (this.map[y][x] && botMap[y][x] === 0 && !this.fuel_map[y][x] && !this.karbonite_map[y][x]) {
+            validTiles.push({ dX, dY });
+          }
+        }
+      }
+    }
+
+    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
+    if (tile !== undefined) {
+      return this.construct(unit, tile.dX, tile.dY);
+    }
+    return null;
   }
 
   _deepCopyMap(map) {
@@ -846,106 +1200,142 @@ class MyRobot extends BCAbstractRobot {
       return null;
     }
 
-
     const opts = [
-      [-1, -1],
-      [-1, 0],
-      [-1, 1],
-      [0, -1],
-      [0, 0],
-      [0, 1],
-      [1, -1],
-      [1, 0],
-      [1, 1]
+      { dX: -1, dY: -1, dist: 9999 },
+      { dX: -1, dY: 0, dist: 9999 },
+      { dX: -1, dY: 1, dist: 9999 },
+      { dX: 0, dY: -1, dist: 9999 },
+      { dX: 0, dY: 0, dist: 9999 },
+      { dX: 0, dY: 1, dist: 9999 },
+      { dX: 1, dY: -1, dist: 9999 },
+      { dX: 1, dY: 0, dist: 9999 },
+      { dX: 1, dY: 1, dist: 9999 },
     ];
-    const opt = opts[Math.floor(Math.random() * opts.length)];
-    return this.moveToTarget(tX + opt[0], tY + opt[1]);
+
+    for (let i = 0; i < opts.length; i++) {
+      const x = tX + opts[i].dX;
+      const y = tY + opts[i].dY;
+
+      if (this.tileIsBlocked({ x, y })) {
+        opts[i].dist = 99999;
+      } else {
+        opts[i].dist = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2) ** 0.5;
+      }
+    }
+
+    let best = 0;
+    for (let i = 0; i < opts.length; i++) {
+      if (opts[i].dist < opts[best].dist) {
+        best = i;
+      }
+    }
+
+
+    const opt = opts[best]; // opts[Math.floor(Math.random() * opts.length)];
+    return this.moveToTarget(tX + opt.dX, tY + opt.dY);
   }
 
-  sanitizeRet(ret) {
-    if (typeof ret === "string") {
+  tileIsBlocked(tile) {
+    // null tile can't be blocked
+    if (tile.x === null || tile.y === null) {
+      return false;
+    }
+
+    // if tile is offscreen consider it blocked
+    if (tile.x < 0 || tile.x > this.map[0].length - 1 || tile.y < 0 || tile.y > this.map[1].length - 1) {
+      return true;
+    }
+
+    // if we're on the tile it's not blocked to us
+    if (this.me.x === tile.x && this.me.y === tile.y) {
+      return false;
+    }
+
+    // if impassable or someone is on it, it's blocked
+    if (!this.map[tile.y][tile.x] || this.getVisibleRobotMap()[tile.y][tile.x] > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  recalculatePathIfNecessary() {
+    if (this.path === null) {
+      this.path = this.search(this.map, [this.me.x, this.me.y], [this.destination.x, this.destination.y], false, this.manhattan);
+      if (this.path.length === 0) {
+        this.moving = false;
+      }
+    }
+  }
+
+  continueMovement() {
+    // check if arrived at ultimate goal
+    if (this.me.x === this.destination.x && this.me.y === this.destination.y) {
+      //  this.log("Movement over");
+      this.moving = false;
       return null;
     }
-    return ret;
+
+    // check if arrived at subgoal
+    if (this.tempDestination !== null && this.me.x === this.tempDestination.x && this.me.y === this.tempDestination.y) {
+      this.tempDestination = null;
+    }
+
+    this.recalculatePathIfNecessary();
+
+    // pick a new subgoal if necessary
+    if (this.path.length > 0 && this.tempDestination === null) {
+      let index = 0;
+      let dist = 999999;
+      for (let i = 0; i < this.path.length; i++) {
+        const thisDist = ((this.path[i].x - this.path[index].x) ** 2 + (this.path[i].y - this.path[index].y) ** 2);
+        if (thisDist < dist) {
+          dist = thisDist;
+          index = i;
+        }
+      }
+
+      this.tempDestination = this.path[index];
+      this.path.splice(index, 1);
+    }
+
+    if (this.tempDestination !== null) {
+      // check if something or someone is in our way and recalc path if necessary
+      if (!this.map[this.tempDestination.y][this.tempDestination.x] || this.getVisibleRobotMap()[this.tempDestination.y][this.tempDestination.x] > 0) {
+        this.tempDestination = null;
+        this.path = null;
+        this.recalculatePathIfNecessary();
+      } else {
+        //move to the subgoal
+        // this.log("Move to: [" + this.tempDestination.x + " " + this.tempDestination.y + "] from [" + this.me.x + " " + this.me.y + "] with deltas [" + (this.tempDestination.x - this.me.x) + " " + (this.tempDestination.y - this.me.y) + "]");
+        //this.logPath();
+        return this.moveWrapper(this.tempDestination.x - this.me.x, this.tempDestination.y - this.me.y);
+      }
+    }
+    return null;
   }
 
   // move to the target x and y, but only one square at a time
   moveToTarget(tX, tY) {
-    // if already at the target then no need to do anything;
-    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
-      this.traversedTiles = [];
-      return AT_TARGET;
+    //  this.log("Movement begun");
+    this.moving = true;
+    this.destination = { x: tX, y: tY };
+    this.path = this.search(this.map, [this.me.x, this.me.y], [this.destination.x, this.destination.y], false, this.manhattan);
+
+    if (this.path.length === 0) {
+      this.moving = false;
     }
-
-    // deep copy the terrain map so we can modify it
-    const terrain = this._deepCopyMap(this.map);
-
-    // mark all bot-filled tiles as impassable
-    const bots = this.getVisibleRobots();
-    this._markImpassableTiles(bots, terrain);
-
-    // for each adjacent tile, calculate the distance from it to the target
-    // if the tile is impassable then mark the distance as really really high so it won't ever be chosen
-    const dists = [];
-    for (let dY = -1; dY <= 1; dY++) {
-      const row = [];
-      for (let dX = -1; dX <= 1; dX++) {
-        const x = this.me.x + dX;
-        const y = this.me.y + dY;
-        if (this._coordIsValid(x, y)) {
-          if (terrain[y][x] === false) {
-            row.push(9999);
-          } else {
-            row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
-          }
-        } else {
-          row.push(9999);
-        }
-      }
-      dists.push(row);
-    }
-
-    let bX = 0;
-    let bY = 0;
-    for (let i = 0; i < dists.length; i++) {
-      for (let j = 0; j < dists[i].length; j++) {
-        if (dists[i][j] < dists[bY][bX]) {
-          bX = j;
-          bY = i;
-        }
-      }
-    }
-
-    // no legal movements -- robot is trapped and needs to backtrack
-    if (dists[bY][bX] === 9999) {
-      this.traversedTiles = [
-        [this.me.x, this.me.y]
-      ];
-      return TRAPPED;
-    }
-
-    // calculate deltas
-    const dX = bX - 1;
-    const dY = bY - 1;
-
-    // if we're about to move to the target then erase the slug trail, otherwise add the new tile to the trail
-    if (this.me.x + dX === tX && this.me.y + dY === tY) {
-      this.traversedTiles = [];
-    } else {
-      this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
-      this.traversedTiles.push([this.me.x + 1, this.me.y + 1]);
-      this.traversedTiles.push([this.me.x + 1, this.me.y - 1]);
-      this.traversedTiles.push([this.me.x - 1, this.me.y + 1]);
-      this.traversedTiles.push([this.me.x - 1, this.me.y - 1]);
-      this.traversedTiles.push([this.me.x + 0, this.me.y + 1]);
-      this.traversedTiles.push([this.me.x + 0, this.me.y - 1]);
-      this.traversedTiles.push([this.me.x + 1, this.me.y + 0]);
-      this.traversedTiles.push([this.me.x - 1, this.me.y + 0]);
-    }
-
-    return this.move(dX, dY);
   }
 
+  logPath() {
+    let str = "";
+    for (let i = 0; i < this.path.length; i++) {
+      str += "[" + this.path[i].x + " " + this.path[i].y + "]";
+      if (i < this.path.length - 1) {
+        str += "->";
+      }
+    }
+    this.log(str);
+  }
 
   getClosestReadyResource(tiles) {
     let closest = -1;
@@ -962,5 +1352,168 @@ class MyRobot extends BCAbstractRobot {
 
     return closest;
   }
+
+  // astar helper
+  init(map) {
+    const grid = [];
+    const botmap = this.getVisibleRobotMap();
+    for (let y = 0; y < map.length; y++) {
+      const row = [];
+      for (let x = 0; x < map[y].length; x++) {
+        const node = {};
+        node.f = 0;
+        node.g = 0;
+        node.h = 0;
+        node.blocked = this.tileIsBlocked({ x, y });
+        node.x = x;
+        node.y = y;
+        node.cost = 1;
+        node.visited = false;
+        node.closed = false;
+        node.parent = null;
+        row.push(node);
+      }
+      grid.push(row);
+    }
+    return grid;
+  }
+
+  // astar helper
+  heap() {
+    return new BinaryHeap((node) => {
+      return node.f;
+    });
+  }
+
+  // moveToTarget helper, executes astar to find a path
+  search(map, start, end, diagonal, heuristic) {
+    const grid = this.init(map);
+    start = grid[start[1]][start[0]];
+    end = grid[end[1]][end[0]];
+    heuristic = this.manhattan;
+    diagonal = true;
+
+    const openHeap = this.heap();
+
+    openHeap.push(start);
+
+    while (openHeap.size() > 0) {
+      // Grab the lowest f(x) to process next.  Heap keeps this sorted for us.
+      const currentNode = openHeap.pop();
+
+      // End case -- result has been found, return the traced path.
+      if (currentNode.x === end.x && currentNode.y === end.y) {
+        let curr = currentNode;
+        const ret = [];
+        while (curr.parent) {
+          ret.push(curr);
+          curr = curr.parent;
+        }
+        return ret.reverse();
+      }
+
+      // Normal case -- move currentNode from open to closed, process each of its neighbors.
+      currentNode.closed = true;
+
+      // Find all neighbors for the current node. Optionally find diagonal neighbors as well (false by default).
+      const neighbors = this.neighbors(grid, currentNode, diagonal);
+
+      for (let i = 0; i < neighbors.length; i++) {
+        const neighbor = neighbors[i];
+
+        if (neighbor.closed || neighbor.blocked) {
+          // Not a valid node to process, skip to next neighbor.
+          continue;
+        }
+
+        // The g score is the shortest distance from start to current node.
+        // We need to check if the path we have arrived at this neighbor is the shortest one we have seen yet.
+        const gScore = currentNode.g + neighbor.cost;
+        const beenVisited = neighbor.visited;
+
+        if (!beenVisited || gScore < neighbor.g) {
+          // Found an optimal (so far) path to this node.  Take score for node to see how good it is.
+          neighbor.visited = true;
+          neighbor.parent = currentNode;
+          neighbor.h = neighbor.h || heuristic(neighbor, end);
+          neighbor.g = gScore;
+          neighbor.f = neighbor.g + neighbor.h;
+
+          if (!beenVisited) {
+            // Pushing to heap will put it in proper place based on the 'f' value.
+            openHeap.push(neighbor);
+          } else {
+            // Already seen the node, but since it has been rescored we need to reorder it in the heap
+            openHeap.remove(neighbor);
+            openHeap.push(neighbor);
+          }
+        }
+      }
+    }
+
+    // No result was found - empty array signifies failure to find path.
+    //  this.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
+    return [];
+  }
+
+  // astar helper
+  manhattan(pos0, pos1) {
+    // See list of heuristics: http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+
+    const d1 = Math.abs(pos1.x - pos0.x);
+    const d2 = Math.abs(pos1.y - pos0.y);
+    return d1 + d2;
+  }
+
+  // astar helper
+  neighbors(grid, node, diagonals) {
+    const ret = [];
+    const x = node.x;
+    const y = node.y;
+
+    // West
+    if (grid[y - 1] && grid[y - 1][x]) {
+      ret.push(grid[y - 1][x]);
+    }
+
+    // East
+    if (grid[y + 1] && grid[y + 1][x]) {
+      ret.push(grid[y + 1][x]);
+    }
+
+    // South
+    if (grid[y] && grid[y][x - 1]) {
+      ret.push(grid[y][x - 1]);
+    }
+
+    // North
+    if (grid[y] && grid[y][x + 1]) {
+      ret.push(grid[y][x + 1]);
+    }
+
+    if (diagonals) {
+      // Southwest
+      if (grid[y - 1] && grid[y - 1][x - 1]) {
+        ret.push(grid[y - 1][x - 1]);
+      }
+
+      // Southeast
+      if (grid[y + 1] && grid[y + 1][x - 1]) {
+        ret.push(grid[y + 1][x - 1]);
+      }
+
+      // Northwest
+      if (grid[y - 1] && grid[y - 1][x + 1]) {
+        ret.push(grid[y - 1][x + 1]);
+      }
+
+      // Northeast
+      if (grid[y + 1] && grid[y + 1][x + 1]) {
+        ret.push(grid[y + 1][x + 1]);
+      }
+    }
+    return ret;
+  }
 }
+
 var robot = new MyRobot();

@@ -31,12 +31,20 @@ class MyRobot extends BCAbstractRobot {
 
     // crusader
     this.stashDest = [-1, -1];
+    this.attacking = false;
+    this.attackDest = [-1, -1];
 
     // castle
     this.step = 0;
     this.location = null;
     this.willBuild = false;
     this.nNearbyResources = 0;
+    this.nResources = 0;
+
+    this.robots = [];
+    this.broadcasted = false;
+    this.buildLastTurn = false;
+
     this.buildIndex = 0;
     this.buildCycle = [
       SPECS.CRUSADER,
@@ -53,11 +61,29 @@ class MyRobot extends BCAbstractRobot {
     this.speed = -1;
   }
 
+  construct(unit, dX, dY) {
+    this.castleTalk(this.me.unit * 8 + Constants.STATUS_BUILDING);
+    return this.buildUnit(unit, dX, dY);
+  }
+
+  harvest() {
+    this.castleTalk(this.me.unit * 8 + Constants.STATUS_MINING);
+    return this.mine();
+  }
+
+  shoot(dX, dY) {
+    this.castleTalk(this.me.unit * 8 + Constants.STATUS_ATTACKING);
+    return this.attack(dX, dY);
+  }
+
+  moveWrapper(dX, dY) {
+    this.castleTalk(this.me.unit * 8 + Constants.STATUS_MOVING);
+    return this.move(dX, dY);
+  }
+
   turn() {
-    this.sanityCheck();
-    if (this.moving) {
-      return this.continueMovement();
-    }
+    this.castleTalk(Constants.STATUS_IDLE); // will be overridden later, if necessary
+    this.sanityCheck(); //this doesn't work for some reason. maybe it's just a replay bug?
 
     if (this.myType === undefined) {
       switch (this.me.unit) {
@@ -77,8 +103,10 @@ class MyRobot extends BCAbstractRobot {
           this.myType = crusader;
           this.speed = Constants.CRUSADER_MOVE_SPEED;
           break;
+        case SPECS.CHURCH:
+          return null;
         default:
-          this.log("Unknown unit type" + this.me.unit);
+          this.log("Unknown unit type " + this.me.unit);
       }
     }
     if (this.myType !== undefined) {
@@ -130,13 +158,13 @@ class MyRobot extends BCAbstractRobot {
       this.log("");
       this.log("");
       this.log("");
-      this.log("################################################################################");
-      this.log("#################                                              #################");
-      this.log("#######                                                                  #######");
-      this.log("####                          !! BUG DETECTED !!                            ####");
-      this.log("#######                                                                  #######");
-      this.log("#################                                              #################");
-      this.log("################################################################################");
+      this.log("########################################################################");
+      this.log("#################                                      #################");
+      this.log("#######                                                          #######");
+      this.log("####                      !! BUG DETECTED !!                        ####");
+      this.log("#######                                                          #######");
+      this.log("#################                                      #################");
+      this.log("########################################################################");
       this.log("");
       this.log("");
       this.log("");
@@ -201,11 +229,10 @@ class MyRobot extends BCAbstractRobot {
 
     const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
     if (tile !== undefined) {
-      return this.buildUnit(unit, tile.dX, tile.dY);
+      return this.construct(unit, tile.dX, tile.dY);
     }
     return null;
   }
-
 
   _deepCopyMap(map) {
     const copy = [];
@@ -378,7 +405,7 @@ class MyRobot extends BCAbstractRobot {
         //move to the subgoal
         // this.log("Move to: [" + this.tempDestination.x + " " + this.tempDestination.y + "] from [" + this.me.x + " " + this.me.y + "] with deltas [" + (this.tempDestination.x - this.me.x) + " " + (this.tempDestination.y - this.me.y) + "]");
         //this.logPath();
-        return this.move(this.tempDestination.x - this.me.x, this.tempDestination.y - this.me.y);
+        return this.moveWrapper(this.tempDestination.x - this.me.x, this.tempDestination.y - this.me.y);
       }
     }
     return null;

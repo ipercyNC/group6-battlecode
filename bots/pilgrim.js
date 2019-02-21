@@ -88,18 +88,15 @@ pilgrim.takeTurn = (self) => {
   // check to see if we should build a church
   // only build a church if there's none nearby and there's a nearby resource patch
   if (!visibleBase) {
-    self.log("no base nearby");
+    //self.log("no base nearby");
     let nearbyPatches = 0;
     for (let i = 0; i < self.resourceTiles.length; i++) {
       const dist = ((self.resourceTiles[i].x - self.me.x) ** 2 + (self.resourceTiles[i].y - self.me.y) ** 2) ** 0.5;
-      if (dist < 6) {
+      if (dist < 3) {
         nearbyPatches++;
       }
     }
     if (nearbyPatches >= 2) {
-      self.log("################################");
-      self.log("BUILD CHURCH")
-      self.log("################################");
       return self.buildOnRandomEmptyTile(SPECS.CHURCH);
     }
   }
@@ -109,12 +106,12 @@ pilgrim.takeTurn = (self) => {
   if (self.resourceTile !== -1) {
     if ((self.me.x === self.resourceTiles[self.resourceTile].x) && (self.me.y === self.resourceTiles[self.resourceTile].y)) {
       if (self.resourceTiles[self.resourceTile].type === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-        self.log("Mine karb");
-        return self.mine();
+        //  self.log("Mine karb");
+        return self.harvest();
       }
       if (self.resourceTiles[self.resourceTile].type === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-        self.log("Mine fuel");
-        return self.mine();
+        //  self.log("Mine fuel");
+        return self.harvest();
       }
     }
   }
@@ -124,7 +121,7 @@ pilgrim.takeTurn = (self) => {
   // otherwise switch to the new one
   const newResourceTile = self.getClosestReadyResource(self.resourceTiles);
   if (newResourceTile !== -1) {
-    if (self.resourceTiles[newResourceTile].x === self.resourceTile.x && self.resourceTiles[newResourceTile].y === self.resourceTile.y) {
+    if (self.resourceTiles[newResourceTile].x === self.resourceTiles[self.resourceTile].x && self.resourceTiles[newResourceTile].y === self.resourceTiles[self.resourceTile].y) {
       if (self.moving) {
         return self.continueMovement();
       }
@@ -136,13 +133,13 @@ pilgrim.takeTurn = (self) => {
   if (self.resourceTile !== -1) {
     // move to karb
     if (self.resourceTiles[self.resourceTile].type === Constants.KARBONITE && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
-      self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      //  self.log("Move to karb " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
       return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
     }
 
     // move to fuel
     if (self.resourceTiles[self.resourceTile].type === Constants.FUEL && self.me.fuel < Constants.PILGRIM_FUEL_CAPACITY) {
-      self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
+      //  self.log("Move to fuel " + self.resourceTiles[self.resourceTile].x + " " + self.resourceTiles[self.resourceTile].y);
       return self.moveToTarget(self.resourceTiles[self.resourceTile].x, self.resourceTiles[self.resourceTile].y);
     }
   }
@@ -159,7 +156,7 @@ pilgrim.takeTurn = (self) => {
   }
 
   // go back home
-  self.log("Going home");
+  //self.log("Going home");
   self.moveAdjacentToTarget(self.castle[0], self.castle[1]);
 
   return null;

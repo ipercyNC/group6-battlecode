@@ -77,3 +77,9 @@ export const PORC_IMPASSABLE = "PORC_IMPASSABLE";
 
 export const AT_TARGET = "AT_TARGET";
 export const TRAPPED = "TRAPPED";
+
+export const STATUS_IDLE = 1; // this starts at 1 to differentiate it from zero, which is no castle talk was sent at all
+export const STATUS_BUILDING = STATUS_IDLE + 1;
+export const STATUS_MINING = STATUS_BUILDING + 1;
+export const STATUS_MOVING = STATUS_MINING + 1;
+export const STATUS_ATTACKING = STATUS_MOVING + 1;
