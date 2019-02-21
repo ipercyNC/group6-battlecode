@@ -85,37 +85,33 @@ prophet.takeTurn = (self) => {
     self.log("Moving closer to enemy");
     return self.move(navigation.moveToTarget(self.me, e_bot, self.getPassableMap(), self.getVisibleRobotMap()));
   }
-  // otherwise, move far away from the castles
-  const options = navigation.buildable.filter((d) => {
+  let options = navigation.goDown.filter((d) => {
     return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
   });
-  let d = 0;
-  let option = options[0];
-  for (let i = 0; i < options.length; i++) {
-    let newD = 0;
-    if (o_castles.length > 0) {
-      newD = navigation.Distance(navigation.applyDir(self.me, options[i]), o_castles[0]);
-    } else {
-      newD = navigation.Distance(navigation.applyDir(self.me, options[i]), self.me);
-    }
+  // otherwise, move far away from the castles
+  if (self.direction == "Up") {
+    options = navigation.goUp.filter((d) => {
+      return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
+    });
+  }
 
-    if (newD > d) {
-      d = newD;
-      option = options[i];
-    }
-  }
   self.log("Moving");
-  // get random choice number
   // check if the robot is at border, change its direction
-  let choice = Math.floor(Math.random() * options.length);
-  if let nav = navigation.getToBorder(this.me) {
-    choice = Math.floor(Math.random() * options.length);
-    return self.move(nav[choice].x, nav[choice].y)
-  }
-  
-  if (Math.floor(Math.random())) {
-    return self.move(option.x, option.y);
-  }
+  if (navigation.getToBorder(self.me)) {
+    if (self.direction == "Up") {
+      self.direction = "Down";
+      options = navigation.goDown.filter((d) => {
+          return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
+      });
+    } else {
+      self.direction = "Up";
+      options = navigation.goUp.filter((d) => {
+          return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
+      });
+    };
+  };
+  // get random choice number
+  const choice = Math.floor(Math.random() * options.length);
   return self.move(options[choice].x, options[choice].y);
 };
 export default prophet;

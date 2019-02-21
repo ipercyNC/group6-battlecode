@@ -23,6 +23,7 @@ class MyRobot extends BCAbstractRobot {
     // prophet
     this.porcDestination = [-1, -1];
     this.inTransit = true;
+    this.direction = "Up";
 
     // castle
     this.step = 0;
