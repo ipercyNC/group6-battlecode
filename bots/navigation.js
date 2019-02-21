@@ -46,12 +46,40 @@ navigation.buildable = [
   { x: 1, y: 1 },
   { x: -1, y: 1 }
 ];
-
+navigation.goUp = [
+  { x: 0, y: 1 },
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+  { x: -1, y: 0 },
+];
+navigation.goDown = [
+  { x: 0, y: -1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+  { x: 1, y: 0 },
+];
 // get new dir
 navigation.applyDir = (loc, dir) => {
   return { x: loc.x + dir.x, y: loc.y + dir.y };
 };
-
+// check if the robot appoaches borders.
+navigation.getToBorder = (robot) => {
+  const robotLoc = {x: robot.x, y: robot.y};
+  const attackRadius = SPECS.UNITS[robot.unit].ATTACK_RADIUS[1];
+  if (robotLoc.x - attackRadius) < 0 || (robotLoc.x + attackRadius) > 64 {
+    return true;
+  }
+  return false;
+}
+// Change direction of current robot
+navigation.changeDirection = (robot) => {
+  if robot.direction === "Up" {
+    robot.direction = "Down";
+    return navigation.goDown;
+  }
+  robot.direction = "Up";
+  return navigation.goUp;
+}
 // move our robot closer to target with in steps, return x_step and y_step
 navigation.moveToTarget = (ourRobot, target, fullMap, robotMap) => {
   const ourRobot_loc = { x: ourRobot.x, y: ourRobot.y };

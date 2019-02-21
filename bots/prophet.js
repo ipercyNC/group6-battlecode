@@ -106,7 +106,13 @@ prophet.takeTurn = (self) => {
   }
   self.log("Moving");
   // get random choice number
-  const choice = Math.floor(Math.random() * options.length);
+  // check if the robot is at border, change its direction
+  let choice = Math.floor(Math.random() * options.length);
+  if let nav = navigation.getToBorder(this.me) {
+    choice = Math.floor(Math.random() * options.length);
+    return self.move(nav[choice].x, nav[choice].y)
+  }
+  
   if (Math.floor(Math.random())) {
     return self.move(option.x, option.y);
   }
