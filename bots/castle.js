@@ -5,6 +5,7 @@ const castle = {};
 castle.takeTurn = (self) => {
   self.step++;
 
+
   if (self.infant) {
     self.infant = false;
     for (let dY = -4; dY <= 4; dY++) {
@@ -42,8 +43,7 @@ castle.takeTurn = (self) => {
     }
   }
 
-  if (!self.broadcasted && nCrusaders >= 20) {
-    self.broadcasted = true;
+  if (!self.broadcasted && nCrusaders >= 5) {
     // pick the radius that is guaranteed to cover the whole map
     const radiuses = [
       ((self.me.x - 0) ** 2 + (self.me.y - 0) ** 2) ** 0.5,
@@ -59,39 +59,36 @@ castle.takeTurn = (self) => {
       }
     }
 
-    // figure out how the map is mirrored
-    let mirroredHorizontally = true;
-    for (let i = 0; i < self.map.length / 2; i++) {
-      if (self.map[0][i] !== self.map[0][self.map.length - i]) {
-        mirroredHorizontally = false;
-      }
-    }
+    const mirroredHorizontally = self.mapIsHorizontallyMirrored();
 
     // select a target by mirroring our location over
-    const enemyCoords = { x: self.me.x, y: self.me.y };
+    const target = { x: self.me.x, y: self.me.y };
 
     if (mirroredHorizontally) {
       self.log("Modified x broadcast");
       if (self.me.x > self.map.length / 2) {
-        enemyCoords.x = Math.round(self.me.x - self.map.length / 2);
+        target.x = Math.round(self.me.x - self.map.length / 2);
       } else {
-        enemyCoords.x = Math.round(self.map.length - self.me.x);
+        target.x = Math.round(self.map.length - self.me.x);
       }
     } else if (!mirroredHorizontally) {
       self.log("Modified y broadcast");
       if (self.me.y > self.map.length / 2) {
-        enemyCoords.y = Math.round(self.me.y - self.map.length / 2);
+        target.y = Math.round(self.me.y - self.map.length / 2);
       } else {
-        enemyCoords.y = Math.round(self.map.length - self.me.y);
+        target.y = Math.round(self.map.length - self.me.y);
       }
     }
 
     // calculate our signal
-    const signal = enemyCoords.x * 256 + enemyCoords.y;
+    const signal = target.x * 256 + target.y;
 
-    // signal to everything on the map to target that enemy
-    self.log("BROADCAST " + signal + " " + enemyCoords.x + " " + enemyCoords.y);
-    self.signal(signal, self.map.length);
+    if (self.fuel > radius ** 2) {
+      // signal to everything on the map to target that enemy
+      self.log("BROADCAST " + signal + " " + target.x + " " + target.y);
+      self.broadcasted = true;
+      self.signal(signal, Math.ceil(radius ** 2));
+    }
   }
 
   // get all robots within range
@@ -139,7 +136,7 @@ castle.takeTurn = (self) => {
 
   // priority build pilgrims until there's enough for all resource tiles on the map
   // note that this is halved to account for resources in enemy terrain
-  if (nPilgrims < self.nResources / 2) {
+  if (nPilgrims < Math.floor(self.nResources / 2)) {
     if (self.haveResourcesToBuild(SPECS.PILGRIM) && Math.random() < 0.33) {
       return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
     }

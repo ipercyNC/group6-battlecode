@@ -81,6 +81,18 @@ class MyRobot extends BCAbstractRobot {
     return this.move(dX, dY);
   }
 
+  mapIsHorizontallyMirrored() {
+    for (let y = 0; y < this.map.length; y++) {
+      for (let x = 0; x < this.map.length; x++) {
+        if (this.map[y][x] !== this.map[y][this.map.length - x - 1]) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
   turn() {
     this.castleTalk(Constants.STATUS_IDLE); // will be overridden later, if necessary
     this.sanityCheck(); //this doesn't work for some reason. maybe it's just a replay bug?
