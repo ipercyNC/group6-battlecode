@@ -88,7 +88,7 @@ pilgrim.takeTurn = (self) => {
   }
 
   // go back home
-  //self.log("Going home");
+  // self.log("Going home");
   self.atlas.moveAdjacentToTarget(self.castle[0], self.castle[1]);
 
   return null;

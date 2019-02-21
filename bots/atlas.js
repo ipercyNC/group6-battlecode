@@ -12,7 +12,7 @@ export default class Atlas {
     this.resourceTiles = null;
     this.owner = robot;
 
-    this.owners = null;
+    this.robots = null;
     this.robotMap = null;
   }
 
@@ -56,7 +56,7 @@ export default class Atlas {
 
   // must be called every round
   update(robots, robotMap) {
-    this.owners = robots;
+    this.robots = robots;
     this.robotMap = robotMap;
   }
 
@@ -106,9 +106,9 @@ export default class Atlas {
   }
 
   getRobot(id) {
-    for (let i = 0; i < this.owners; i++) {
-      if (this.owners[i].id === id) {
-        return this.owners[i];
+    for (let i = 0; i < this.robots; i++) {
+      if (this.robots[i].id === id) {
+        return this.robots[i];
       }
     }
     return null;
