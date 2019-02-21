@@ -6,11 +6,17 @@ castle.takeTurn = (self) => {
   self.step++;
 
 
+
+  if (self.haveResourcesToBuild(SPECS.PILGRIM) && Math.random() < 0.33) {
+    return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
+  }
+
+
   if (self.infant) {
     self.infant = false;
     for (let dY = -4; dY <= 4; dY++) {
       for (let dX = -4; dX <= 4; dX++) {
-        if (self._coordIsValid(self.me.x + dX, self.me.y + dY)) {
+        if (self.atlas._coordIsValid(self.me.x + dX, self.me.y + dY)) {
           if (self.karbonite_map[self.me.y + dY][self.me.x + dX] || self.fuel_map[self.me.y + dY][self.me.x + dX]) {
             self.nNearbyResources++;
           }

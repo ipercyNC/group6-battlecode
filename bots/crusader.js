@@ -5,7 +5,7 @@ const crusader = {};
 
 const tileIsPorced = (x, y, self) => {
   // don't porc next to bases cuz they'll get walled in
-  if (self.adjacentToBase(x, y)) {
+  if (self.atlas.adjacentToBase(x, y)) {
     return true;
   }
 
@@ -105,8 +105,8 @@ crusader.takeTurn = (self) => {
             }
 
             // otherwise move closer
-            self.moveAdjacentToTarget(bot.x, bot.y);
-            return self.continueMovement();
+            self.atlas.moveAdjacentToTarget(bot.x, bot.y);
+            return self.atlas.continueMovement();
           }
         }
       }
@@ -128,7 +128,7 @@ crusader.takeTurn = (self) => {
 
 
   if (self.moving) {
-    return self.continueMovement();
+    return self.atlas.continueMovement();
   }
 
 
@@ -145,7 +145,7 @@ crusader.takeTurn = (self) => {
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-        self.moveToTarget(self.porcDestination[0], self.porcDestination[1]);
+        self.atlas.moveToTarget(self.porcDestination[0], self.porcDestination[1]);
       }
     }
   }
