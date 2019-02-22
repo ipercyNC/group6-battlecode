@@ -28,6 +28,7 @@ class MyRobot extends BCAbstractRobot {
     this.castle = [-1, -1];
     this.resourceTiles = [];
     this.forbiddenResourceTiles = [];
+    this.buildBaseLocation = null;
 
     // prophet
     this.porcDestination = [-1, -1];

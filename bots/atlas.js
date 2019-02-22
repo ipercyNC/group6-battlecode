@@ -92,10 +92,7 @@ export default class Atlas {
     }
   }
 
-  // base means castle or church
-  getVisibleBase() {
-    const range = SPECS.UNITS[this.owner.me.unit].VISION_RADIUS;
-
+  getBaseWithinRange(range) {
     for (let y = this.owner.me.y - range; y <= this.owner.me.y + range; y++) {
       for (let x = this.owner.me.x - range; x <= this.owner.me.x + range; x++) {
         if (this._coordIsValid(x, y)) {
@@ -111,6 +108,78 @@ export default class Atlas {
       }
     }
     return null;
+  }
+
+  getOptimalBaseLocation(cX, cY) {
+    const MAX_RADIUS = 4;
+    const cluster = [];
+
+    // group nearby resource tiles into clusters
+    for (let y = cY - MAX_RADIUS; y <= cY + MAX_RADIUS; y++) {
+      for (let x = cX - MAX_RADIUS; x <= cX + MAX_RADIUS; x++) {
+        if (this._coordIsValid(x, y) && this.resourceMap[y][x] !== Constants.EMPTY) {
+          cluster.push({ x, y });
+        }
+      }
+    }
+
+    // find the best place to build a base for the cluster
+    let base = null;
+
+    // find rectangle that contains the cluster
+    let x1 = 999;
+    let x2 = 0;
+    let y1 = 999;
+    let y2 = 0;
+
+    for (let i = 0; i < cluster.length; i++) {
+      if (cluster[i].x < x1) {
+        x1 = cluster[i].x;
+      }
+      if (cluster[i].x > x2) {
+        x2 = cluster[i].x;
+      }
+      if (cluster[i].y < y1) {
+        y1 = cluster[i].y;
+      }
+      if (cluster[i].y > y2) {
+        y2 = cluster[i].y;
+      }
+    }
+
+
+    // calculate avg dist from each potential place to all tiles in the cluster
+    const potentialBases = [];
+    for (let y = y1 - 1; y <= y2 + 1; y++) {
+      for (let x = x1 - 1; x <= x2 + 1; x++) {
+        if (this._coordIsValid(x, y) && this.resourceMap[y][x] === Constants.EMPTY) {
+          let sum = 0;
+          for (let j = 0; j < cluster.length; j++) {
+            sum += ((y - cluster[j].y) ** 2 + (x - cluster[j].x) ** 2) ** 0.5;
+          }
+          potentialBases.push({ x, y, avgDist: (sum / cluster.length) });
+        }
+      }
+    }
+
+    // pick the place that has the smallest avg dist
+    let best = 0;
+    for (let j = 0; j < potentialBases.length; j++) {
+      if (potentialBases[j].avgDist < potentialBases[best].avgDist) {
+        best = j;
+      }
+    }
+    if (potentialBases[best] !== undefined) {
+      base = potentialBases[best];
+    }
+
+    return base;
+  }
+
+  // base means castle or church
+  getVisibleBase() {
+    const range = SPECS.UNITS[this.owner.me.unit].VISION_RADIUS;
+    return this.getBaseWithinRange(range);
   }
 
   getRobot(id) {
@@ -136,7 +205,7 @@ export default class Atlas {
 
   saveParentBase() {
     for (let i = 0; i < this.robots.length; i++) {
-      if (this.robots[i].unit === SPECS.CASTLE) {
+      if (this.robots[i].unit === SPECS.CASTLE || this.robots[i].unit === SPECS.CHURCH) {
         this.base = this.robots[i];
       }
     }
@@ -469,7 +538,7 @@ export default class Atlas {
     }
 
     // No result was found - empty array signifies failure to find path.
-    this.owner.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
+    //  this.owner.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
     return [];
   }
 

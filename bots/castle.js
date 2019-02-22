@@ -5,8 +5,6 @@ const castle = {};
 castle.takeTurn = (self) => {
   self.step++;
 
-
-
   if (self.haveResourcesToBuild(SPECS.PILGRIM) && Math.random() < 0.33) {
     return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
   }
