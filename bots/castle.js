@@ -65,7 +65,7 @@ castle.takeTurn = (self) => {
       }
     }
 
-    const mirroredHorizontally = self.mapIsHorizontallyMirrored();
+    const mirroredHorizontally = self.atlas.mapIsHorizontallyMirrored();
 
     // select a target by mirroring our location over
     const target = { x: self.me.x, y: self.me.y };

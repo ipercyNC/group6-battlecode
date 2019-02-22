@@ -14,6 +14,12 @@ export default class Atlas {
 
     this.robots = null;
     this.robotMap = null;
+
+    this.moving = false;
+    this.destination = null;
+    this.path = null;
+    this.tempDestination = null;
+    this.base = null;
   }
 
   initialize() {
@@ -91,12 +97,14 @@ export default class Atlas {
     const range = SPECS.UNITS[this.owner.me.unit].VISION_RADIUS;
 
     for (let y = this.owner.me.y - range; y <= this.owner.me.y + range; y++) {
-      for (let x = this.owner.me.x - range; y <= this.owner.me.x + range; x++) {
+      for (let x = this.owner.me.x - range; x <= this.owner.me.x + range; x++) {
         if (this._coordIsValid(x, y)) {
           if (this.robotMap[y][x] > 0) {
             const bot = this.getRobot(this.robotMap[y][x]);
-            if (bot.unit === SPECS.CHURCH || bot.unit === SPECS.CASTLE) {
-              return bot;
+            if (bot !== null) {
+              if (bot.unit === SPECS.CHURCH || bot.unit === SPECS.CASTLE) {
+                return bot;
+              }
             }
           }
         }
@@ -106,16 +114,11 @@ export default class Atlas {
   }
 
   getRobot(id) {
-    for (let i = 0; i < this.robots; i++) {
-      if (this.robots[i].id === id) {
-        return this.robots[i];
-      }
-    }
-    return null;
+    return this.owner.getRobot(id);
   }
 
   moveWrapper(dX, dY) {
-    this.castleTalk(this.owner.unit * 8 + Constants.STATUS_MOVING);
+    this.owner.castleTalk(this.owner.me.unit * 8 + Constants.STATUS_MOVING);
     return this.owner.move(dX, dY);
   }
 
@@ -131,26 +134,42 @@ export default class Atlas {
     return true;
   }
 
+  saveParentBase() {
+    for (let i = 0; i < this.robots.length; i++) {
+      if (this.robots[i].unit === SPECS.CASTLE) {
+        this.base = this.robots[i];
+      }
+    }
+  }
+
+  tileIsFuel(x, y) {
+    if (this.resourceMap[y][x] === Constants.FUEL) {
+      return true;
+    }
+    return false;
+  }
+
+  tileIsKarbonite(x, y) {
+    if (this.resourceMap[y][x] === Constants.KARBONITE) {
+      return true;
+    }
+    return false;
+  }
+
   adjacentToBase(x, y) {
     const maxX = this.map[0].length - 1;
     const maxY = this.map.length - 1;
     const minX = 0;
     const minY = 0;
 
-    const adjacentUnits = [];
-
     for (let dY = -1; dY <= 1; dY++) {
       for (let dX = -1; dX <= 1; dX++) {
-        if (x + dX >= minX && x + dX <= maxX && minY + dY >= 0 && y + dY <= maxY) {
-          adjacentUnits.push(this.getRobot(this.robotMap[y + dY][x + dX]));
-        }
-      }
-    }
+        if (x + dX >= minX && x + dX <= maxX && y + dY >= minY && y + dY <= maxY) {
+          const bot = this.getRobot(this.robotMap[y + dY][x + dX]);
 
-    for (let i = 0; i < adjacentUnits.length; i++) {
-      if (adjacentUnits[i] !== null) {
-        if (adjacentUnits[i].unit === SPECS.CASTLE || adjacentUnits[i].unit === SPECS.CHURCH) {
-          return true;
+          if (bot !== null && (bot.unit === SPECS.CASTLE || bot.unit === SPECS.CHURCH)) {
+            return true;
+          }
         }
       }
     }
@@ -185,7 +204,7 @@ export default class Atlas {
     return false;
   }
 
-  moveAdjacentToTarget(tX, tY) {
+  calculatePathAdjacentToTarget(tX, tY) {
     // check that we aren't already adjacent
     const dX = this.owner.me.x - tX;
     const dY = this.owner.me.y - tY;
@@ -225,7 +244,7 @@ export default class Atlas {
 
 
     const opt = opts[best]; // opts[Math.floor(Math.random() * opts.length)];
-    return this.moveToTarget(tX + opt.dX, tY + opt.dY);
+    return this.calculatePathToTarget(tX + opt.dX, tY + opt.dY);
   }
 
   tileIsBlocked(tile) {
@@ -308,34 +327,37 @@ export default class Atlas {
   }
 
   // move to the target x and y, but only one square at a time
-  moveToTarget(tX, tY) {
+  calculatePathToTarget(tX, tY) {
     //  this.log("Movement begun");
     this.moving = true;
     this.destination = { x: tX, y: tY };
     this.path = this.search(this.map, [this.owner.me.x, this.owner.me.y], [this.destination.x, this.destination.y], false, this.manhattan);
-
     if (this.path.length === 0) {
       this.moving = false;
     }
   }
 
   logPath() {
-    let str = "";
-    for (let i = 0; i < this.path.length; i++) {
-      str += "[" + this.path[i].x + " " + this.path[i].y + "]";
-      if (i < this.path.length - 1) {
-        str += "->";
+    if (this.path === null) {
+      this.owner.log("null");
+    } else {
+      let str = "";
+      for (let i = 0; i < this.path.length; i++) {
+        str += "[" + this.path[i].x + " " + this.path[i].y + "]";
+        if (i < this.path.length - 1) {
+          str += "->";
+        }
       }
+      this.owner.log(str);
     }
-    this.log(str);
   }
 
-  getClosestReadyResource(tiles) {
+  getClosestReadyResource() {
     let closest = -1;
     let bestDist = 99999;
-    for (let i = 0; i < tiles.length; i++) {
-      if (tiles[i].state === Constants.RESOURCE_TILE_READY) {
-        const dist = (tiles[i].x - this.owner.me.x) ** 2 + (tiles[i].y - this.owner.me.y) ** 2;
+    for (let i = 0; i < this.resourceTiles.length; i++) {
+      if (this.resourceTiles[i].state === Constants.RESOURCE_TILE_READY) {
+        const dist = (this.resourceTiles[i].x - this.owner.me.x) ** 2 + (this.resourceTiles[i].y - this.owner.me.y) ** 2;
         if (dist < bestDist) {
           closest = i;
           bestDist = dist;
@@ -343,7 +365,10 @@ export default class Atlas {
       }
     }
 
-    return closest;
+    if (closest === -1) {
+      return null;
+    }
+    return this.resourceTiles[closest];
   }
 
   // astar helper
@@ -377,7 +402,7 @@ export default class Atlas {
     });
   }
 
-  // moveToTarget helper, executes astar to find a path
+  // calculatePathToTarget helper, executes astar to find a path
   search(map, start, end, diagonal, heuristic) {
     const grid = this.init(map);
     start = grid[start[1]][start[0]];
@@ -444,7 +469,7 @@ export default class Atlas {
     }
 
     // No result was found - empty array signifies failure to find path.
-    // this.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
+    this.owner.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
     return [];
   }
 

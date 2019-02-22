@@ -105,7 +105,7 @@ crusader.takeTurn = (self) => {
             }
 
             // otherwise move closer
-            self.atlas.moveAdjacentToTarget(bot.x, bot.y);
+            self.atlas.calculatePathAdjacentToTarget(bot.x, bot.y);
             return self.atlas.continueMovement();
           }
         }
@@ -121,7 +121,7 @@ crusader.takeTurn = (self) => {
         self.attackDest = { x: Math.ceil(bots[i].signal / 256), y: bots[i].signal % 256 };
 
         //  self.log("BROADCAST RECEIVED " + bots[i].signal + " " + self.attackDest.x + " " + self.attackDest.y);
-        return self.moveToTarget(self.attackDest.x, self.attackDest.y);
+        return self.calculatePathToTarget(self.attackDest.x, self.attackDest.y);
       }
     }
   }
@@ -145,7 +145,7 @@ crusader.takeTurn = (self) => {
       }
 
       if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-        self.atlas.moveToTarget(self.porcDestination[0], self.porcDestination[1]);
+        self.atlas.calculatePathToTarget(self.porcDestination[0], self.porcDestination[1]);
       }
     }
   }
