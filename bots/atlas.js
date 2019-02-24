@@ -20,12 +20,20 @@ export default class Atlas {
     this.path = null;
     this.tempDestination = null;
     this.base = null;
+    this.team = null;
+
+    this.stationary = false;
+    this.porcDestination = null;
+    this.pos = null;
+
+    this.nResources = -1;
   }
 
   initialize() {
     this.map = this.owner.map;
     this.fuelMap = this.owner.fuel_map;
     this.karbMap = this.owner.karbonite_map;
+    this.team = this.owner.me.team;
     this.initializeResources();
   }
 
@@ -64,6 +72,10 @@ export default class Atlas {
   update(robots, robotMap) {
     this.robots = robots;
     this.robotMap = robotMap;
+    this.pos = {
+      x: this.owner.me.x,
+      y: this.owner.me.y,
+    };
   }
 
   // update our resource map
@@ -90,6 +102,20 @@ export default class Atlas {
         }
       }
     }
+  }
+
+  getNumResources() {
+    if (this.nResources === -1) {
+      this.nResources = 0;
+      for (let y = 0; y < this.map.length; y++) {
+        for (let x = 0; x < this.map.length; x++) {
+          if (this.karbMap[y][x] || this.fuelMap[y][x]) {
+            this.nResources++;
+          }
+        }
+      }
+    }
+    return this.nResources;
   }
 
   getBaseWithinRange(range) {
@@ -187,7 +213,7 @@ export default class Atlas {
   }
 
   moveWrapper(dX, dY) {
-    this.owner.castleTalk(this.owner.me.unit * 8 + Constants.STATUS_MOVING);
+    this.owner.network.transmit(Constants.STATUS_MOVING); // this really ought to be refactored
     return this.owner.move(dX, dY);
   }
 
@@ -206,7 +232,9 @@ export default class Atlas {
   saveParentBase() {
     for (let i = 0; i < this.robots.length; i++) {
       if (this.robots[i].unit === SPECS.CASTLE || this.robots[i].unit === SPECS.CHURCH) {
-        this.base = this.robots[i];
+        if (this.robots[i].team === this.team) {
+          this.base = this.robots[i];
+        }
       }
     }
   }
@@ -600,4 +628,104 @@ export default class Atlas {
     }
     return ret;
   }
+
+
+  getPorcDestination() {
+    const cX = this.pos.x; // center x
+    const cY = this.pos.y; // center y
+
+    const GRID_SPACE = 1;
+
+    // create a map of distances from our castle to available porc tiles
+    const botMap = this.robotMap;
+    const porcMap = [];
+    for (let y = 0; y < botMap.length; y++) {
+      const row = [];
+      let offset = 0;
+      if (y % 2 === 0) {
+        offset = 1;
+      }
+      for (let x = 0; x < botMap[y].length; x++) {
+        if ((x - offset) % (GRID_SPACE + 1) === 0) {
+          if ((this.tileIsPorced(x, y)) || // can't build porc if there's already porc there
+            (this.karbMap[y][x]) || // don't build on karb
+            (this.fuelMap[y][x]) || // or fuel
+            (!this.map[y][x]) // can't build on a wall
+          ) {
+            row.push(99999);
+          } else {
+            row.push((x - cX) ** 2 + (y - cY) ** 2);
+          }
+        } else {
+          row.push(99999);
+        }
+      }
+      porcMap.push(row);
+    }
+
+    // pick the closest open tile
+    let bX = 0;
+    let bY = 0;
+    for (let y = 0; y < porcMap.length; y++) {
+      for (let x = 0; x < porcMap[y].length; x++) {
+        if (porcMap[y][x] < porcMap[bY][bX]) {
+          bX = x;
+          bY = y;
+        }
+      }
+    }
+
+    return [bX, bY];
+  }
+
+
+  tileIsPorced(x, y) {
+    // don't porc next to bases cuz they'll get walled in
+    if (this.adjacentToBase(x, y)) {
+      return true;
+    }
+
+
+    const botMap = this.robotMap;
+    if (botMap[y][x] > 0) {
+      const bot = this.getRobot(botMap[y][x]).unit;
+      if (bot === SPECS.CRUSADER || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+
+  moveToPorcGrid() {
+    if (!this.stationary) {
+      if (this.porcDestination === null) {
+        this.porcDestination = this.getPorcDestination();
+      }
+      if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
+        // if we're at our dest then stop moving
+        // if someone got there first then pick a new dest
+        if (this.robotMap[this.porcDestination[1]][this.porcDestination[0]] > 0) {
+          if (this.pos.x === this.porcDestination[0] && this.pos.y === this.porcDestination[1]) {
+            this.stationary = true;
+          } else if (this.tileIsPorced(this.porcDestination[0], this.porcDestination[1])) {
+            this.porcDestination = this.getPorcDestination();
+            this.moving = false;
+          }
+        }
+
+        if (this.moving) {
+          return this.continueMovement();
+        }
+        if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
+          this.calculatePathToTarget(this.porcDestination[0], this.porcDestination[1]);
+          return this.continueMovement();
+        }
+      }
+    }
+    return null;
+  }
+
+
 }

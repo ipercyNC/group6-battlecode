@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "description": "Bot for Battlecode Crusade.",
   "scripts": {
-    "start": "bc19run -b afkbot -r bots --chi 1000",
+    "start": "bc19run -b bots -r bots --chi 1000",
+    "afkstart": "bc19run -b afkbot -r bots --chi 1000",
     "watch": "NODE_ENV=test jest --watch",
     "coverage": "NODE_ENV=test jest --coverage",
     "build": "rm -rf dist;mkdir dist;bc19compile -d bots -o dist/index.js",

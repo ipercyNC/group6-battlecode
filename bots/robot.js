@@ -6,6 +6,8 @@ import crusader from "./crusader.js";
 import * as Constants from "./constants.js";
 import BinaryHeap from "./binaryHeap.js";
 import Atlas from "./atlas.js";
+import Tactician from "./tactician.js";
+import Network from "./network.js";
 
 
 // eslint-disable-next-line no-unused-lets
@@ -13,6 +15,8 @@ class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
     this.atlas = null;
+    this.tactician = null;
+    this.network = null;
 
     // general
     this.infant = true;
@@ -36,7 +40,7 @@ class MyRobot extends BCAbstractRobot {
 
     // crusader
     this.stashDest = [-1, -1];
-    this.attacking = false;
+    this.phase = Constants.COMBAT_PHASE_IDLE;
     this.attackDest = [-1, -1];
 
     // castle
@@ -45,6 +49,8 @@ class MyRobot extends BCAbstractRobot {
     this.willBuild = false;
     this.nNearbyResources = 0;
     this.nResources = 0;
+    this.turnsToSkip = 0;
+    this.rank = null;
 
     this.robots = [];
     this.broadcasted = false;
@@ -67,17 +73,35 @@ class MyRobot extends BCAbstractRobot {
   }
 
   construct(unit, dX, dY) {
-    this.castleTalk(this.me.unit * 8 + Constants.STATUS_BUILDING);
-    return this.buildUnit(unit, dX, dY);
+    if (dX < -1 || dX > 1 || dY < -1 || dY > 1) {
+      return null;
+    }
+
+    if (unit === SPECS.CHURCH) {
+      if (
+        this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE &&
+        this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL
+      ) {
+        this.network.transmit(Constants.STATUS_BUILDING);
+        return this.buildUnit(unit, dX, dY);
+      }
+    } else if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
+      this.network.transmit(Constants.STATUS_BUILDING);
+      return this.buildUnit(unit, dX, dY);
+    }
+    return null;
   }
 
   harvest() {
-    this.castleTalk(this.me.unit * 8 + Constants.STATUS_MINING);
+    this.network.transmit(Constants.STATUS_MINING);
     return this.mine();
   }
 
   shoot(dX, dY) {
-    this.castleTalk(this.me.unit * 8 + Constants.STATUS_ATTACKING);
+    this.network.transmit(Constants.STATUS_ATTACKING);
     return this.attack(dX, dY);
   }
 
@@ -86,10 +110,19 @@ class MyRobot extends BCAbstractRobot {
       this.atlas = new Atlas(this);
       this.atlas.initialize();
     }
+    if (this.tactician === null) {
+      this.tactician = new Tactician(this);
+      this.tactician.initialize();
+    }
+    if (this.network === null) {
+      this.network = new Network(this);
+      this.network.initialize();
+    }
 
-    this.castleTalk(Constants.STATUS_IDLE); // will be overridden later, if necessary
     this.sanityCheck(); // this doesn't work for some reason. maybe it's just a replay bug?
     this.atlas.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.tactician.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.network.update();
 
     if (this.myType === undefined) {
       switch (this.me.unit) {
@@ -145,7 +178,12 @@ class MyRobot extends BCAbstractRobot {
     }
 
     // check if we're off the map
-    if (this.me.x < 0 || this.me.y < 0 || this.me.y >= this.map.length || this.me.x >= this.map[0].length) {
+    if (
+      this.me.x < 0 ||
+      this.me.y < 0 ||
+      this.me.y >= this.map.length ||
+      this.me.x >= this.map[0].length
+    ) {
       insane = true;
     }
 
@@ -153,7 +191,6 @@ class MyRobot extends BCAbstractRobot {
     if (!this.map[this.me.y][this.me.x]) {
       insane = true;
     }
-
 
     if (insane) {
       this.log("");
@@ -164,13 +201,27 @@ class MyRobot extends BCAbstractRobot {
       this.log("");
       this.log("");
       this.log("");
-      this.log("########################################################################");
-      this.log("#################                                      #################");
-      this.log("#######                                                          #######");
-      this.log("####                      !! BUG DETECTED !!                        ####");
-      this.log("#######                                                          #######");
-      this.log("#################                                      #################");
-      this.log("########################################################################");
+      this.log(
+        "########################################################################"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "####                      !! BUG DETECTED !!                        ####"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "########################################################################"
+      );
       this.log("");
       this.log("");
       this.log("");
@@ -185,7 +236,10 @@ class MyRobot extends BCAbstractRobot {
 
   // also adds in a buffer for churches in case pilgrims want to build them
   haveResourcesToBuild(unit) {
-    if (this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 && this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200) {
+    if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
       return true;
     }
     return false;
@@ -199,7 +253,12 @@ class MyRobot extends BCAbstractRobot {
         const x = this.me.x + dX;
         const y = this.me.y + dY;
         if (this.atlas._coordIsValid(x, y)) {
-          if (this.map[y][x] && botMap[y][x] === 0 && !this.fuel_map[y][x] && !this.karbonite_map[y][x]) {
+          if (
+            this.map[y][x] &&
+            botMap[y][x] === 0 &&
+            !this.fuel_map[y][x] &&
+            !this.karbonite_map[y][x]
+          ) {
             validTiles.push({ dX, dY });
           }
         }
@@ -212,6 +271,4 @@ class MyRobot extends BCAbstractRobot {
     }
     return null;
   }
-
-
 }
