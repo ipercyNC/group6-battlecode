@@ -30,11 +30,18 @@ const makeFuelMap = () => {
 };
 const makeMap = () => {
   return [
+	  [1,1,1,1,0],
 	  [1,1,1,1,1],
 	  [1,1,1,1,1],
 	  [1,1,1,1,1],
-	  [1,1,1,1,1],
-	  [1,1,1,1,1]
+	  [1,1,1,1,0]
+  ];
+};
+const makeHorizontalMap = () => {
+  return [[0,0,0,0],
+	  [0,0,0,0],
+	  [0,0,0,0],
+	  [0,0,0,0]
   ];
 };
 const makeRobotMap = () => {
@@ -107,10 +114,7 @@ describe("class Atlas", () => {
     it("should update the resource map based on robot locations", () => {
       const atlas = makeAtlas();
       atlas.owner= {'me': {'x':0}};
-      atlas.map = makeMap();
-      atlas.karbMap = makeKarbMap();
-      atlas.fuelMap = makeFuelMap();
-      atlas.initializeResources();
+      setupBasics(atlas);
       atlas.robotMap = makeRobotMap();
       atlas.updateResourceMap();
       expect(atlas.resourceTiles[0].state).toEqual(Constants.RESOURCE_TILE_BUSY);
@@ -119,18 +123,12 @@ describe("class Atlas", () => {
   describe("functions to tileIsFuel and tileIsKarbonite",() => {
     it("testing tileIsFuel()", () => {
       const atlas = makeAtlas();
-      atlas.map = makeMap();
-      atlas.karbMap = makeKarbMap();
-      atlas.fuelMap = makeFuelMap();
-      atlas.initializeResources();
+      setupBasics(atlas);
       expect(atlas.resourceMap[0][0]).toEqual(Constants.FUEL);
     });
     it("testing tileIsKarbonite()", () => {
      const atlas = makeAtlas();
-     atlas.map = makeMap();
-     atlas.karbMap = makeKarbMap();
-     atlas.fuelMap = makeFuelMap();
-     atlas.initializeResources();
+     setupBasics(atlas);
      expect(atlas.resourceMap[2][3]).toEqual(Constants.KARBONITE); 
     });
   }); 
@@ -138,15 +136,62 @@ describe("class Atlas", () => {
     it("testing when tile is blocked by other robot", () => {
       const atlas = makeAtlas(); 
       setupBasics(atlas);
-      expect(atlas.resourceMap[2][3]).toEqual(Constants.KARBONITE);
+      const tile = {'x':0,'y':0};
+      atlas.owner = {'me': {'x':1,'y':1}};
+      atlas.robotMap = makeRobotMap();
+      expect(atlas.tileIsBlocked(tile)).toEqual(true);
     });
     it("testing when blocked by me", () => {
-       
+      const atlas = makeAtlas();
+      setupBasics(atlas);
+      const tile = {'x':0,'y':0}; 
+      atlas.owner = {'me': {'x':0,'y':0}};
+      expect(atlas.tileIsBlocked(tile)).toEqual(false); 
     });
     it("testing when not blocked", () => {
-      
+      const atlas = makeAtlas();
+      setupBasics(atlas);
+      const tile ={'x':2,'y':2};
+      atlas.owner = {'me': {'x':3,'y':3}};
+      atlas.robotMap = makeRobotMap();
+      expect(atlas.tileIsBlocked(tile)).toEqual(false);
     });
 
+  }); 
+  describe("function coordIsAdjacentToResource()", () => {
+    it("testing coordAdjacent when adjacent", () =>{
+      const atlas = makeAtlas();
+      setupBasics(atlas);
+      atlas.karbonite_map= makeKarbMap();
+      expect(atlas.coordIsAdjacentToResource(3,3)).toEqual(true);
+    });
+    it("testing coordAdjacent when not adjacent", () => {
+     const atlas = makeAtlas();
+     setupBasics(atlas); 
+     atlas.karbonite_map = makeKarbMap();
+     expect(atlas.coordIsAdjacentToResource(0,2)).toEqual(false);
+    });
+  });
+  describe("function mapIsHorizontallyMirrored()", () => {
+    it("testing when not horizontallyMirrored", () => {
+      const atlas = makeAtlas();
+      setupBasics(atlas);
+      expect(atlas.mapIsHorizontallyMirrored()).toEqual(false);
+    });
+    it("testing when horizontallyMirrored", () => {
+      const atlas = makeAtlas();
+      atlas.map = makeHorizontalMap();
+      expect(atlas.mapIsHorizontallyMirrored()).toEqual(true);
+    });
+  });
+  describe("function manhattan()", () => {
+    it("testing manhattan expected results", () => {
+      const atlas = makeAtlas();
+      const pos1 = {'x':20,'y':20};
+      const pos2 = {'x':17,'y':16};
+      expect(atlas.manhattan(pos1,pos2)).toEqual(7);
+      expect(atlas.manhattan(pos2,pos1)).toEqual(7);
+    });
   });
 
 
