@@ -1,39 +1,47 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
-import navigation from "./navigation.js";
+import * as Constants from "./constants.js";
 
 const crusader = {};
+
+
 crusader.takeTurn = (self) => {
-  // make directional choice - either given by castle? or enemy?
-  const visible = self.getVisibleRobots();
+  const bots = self.getVisibleRobots();
 
-  // get attackable robots
-  const attackable = visible.filter((r) => {
-    if (!self.isVisible(r)) {
-      return false;
-    }
-
-    const dist = Math.pow((r.x - self.me.x), 2) + Math.pow((r.y - self.me.y), 2);
-    if (r.team !== self.me.team &&
-      SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist &&
-      dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1]) {
-      return true;
-    }
-    return false;
-  });
-  if (attackable.length > 0) {
-    // attack first robot
-    const r = attackable[0];
-    // self.log("" + r);
-    // self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
-    return self.attack(r.x - self.me.x, r.y - self.me.y);
+  if (self.infant) {
+    self.infant = false;
   }
 
-  // make random move to start
-  const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-  const choice = choices[Math.floor(Math.random() * choices.length)];
-  const target = navigation.basicMove(self, choice);
-  // self.log("trying to move to " + target);
-  return self.move(target[0], target[1]);
-};
+  // find out if there's an enemy to shoot
+  // if there is, either attack them or move closer to them
+  const enemy = self.tactician.getNearbyEnemy();
+  if (enemy !== null) {
+    return self.tactician.attackEnemy(enemy);
+  }
 
+  if (self.phase === Constants.COMBAT_PHASE_SEARCH_AND_DESTROY) {
+    if (self.atlas.moving) {
+      return self.atlas.continueMovement();
+    }
+
+    const tX = Math.round(Math.random() * (self.map.length));
+    const tY = Math.round(Math.random() * (self.map.length));
+    self.atlas.calculatePathAdjacentToTarget(tX, tY);
+  } else {
+    // check if we've been signalled to switch to s&d mode
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].team === self.me.team) {
+        if (bots[i].signal > 0) {
+          self.phase = Constants.COMBAT_PHASE_SEARCH_AND_DESTROY;
+          self.atlas.calculatePathAdjacentToTarget(Math.ceil(bots[i].signal / 256), bots[i].signal % 256);
+        }
+      }
+    }
+  }
+
+  if (self.atlas.moving) {
+    return self.atlas.continueMovement();
+  }
+
+  return self.atlas.moveToPorcGrid();
+};
 export default crusader;

@@ -1,90 +1,73 @@
-import { SPECS } from "battlecode";
-
-const haveResourcesToBuild = (unit, self) => {
-  if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
-    return true;
-  }
-  return false;
-};
-
-const buildOnRandomEmptyTile = (unit, self) => {
-  if (haveResourcesToBuild(unit, self)) {
-    const validTiles = [];
-    const botMap = self.getVisibleRobotMap();
-    for (let dY = -1; dY <= 1; dY++) {
-      for (let dX = -1; dX <= 1; dX++) {
-        const x = self.me.x + dX;
-        const y = self.me.y + dY;
-        if (self._coordIsValid(x, y)) {
-          if (self.map[y][x] && botMap[y][x] === 0) {
-            validTiles.push({ dX, dY });
-          }
-        }
-      }
-    }
-
-    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
-    if (tile !== undefined) {
-      return self.buildUnit(unit, tile.dX, tile.dY);
-    }
-  }
-  return null;
-};
-
+import SPECS from "./specs.js";
+import * as Constants from "./constants.js";
 
 const castle = {};
 
 castle.takeTurn = (self) => {
   self.step++;
 
-  // get all robots within range
-  const enemiesInRange = self.getVisibleRobots().filter((robot) => {
-    const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
-    const minRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0];
-    const maxRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1];
-    if (self.me.team !== robot.team && dist >= minRange && dist <= maxRange) {
-      return true;
-    }
-    return false;
-  });
 
-  // attack enemies in order of prophet > preacher > crusader > pilgrim
-  if (enemiesInRange.length > 0 && self.fuel >= 10) {
-    // break the list of attackable robots down by unit type
-    const enemyRobots = {
-      [SPECS.PROPHET]: [],
-      [SPECS.PREACHER]: [],
-      [SPECS.CRUSADER]: [],
-      [SPECS.PILGRIM]: [],
-    };
+  if (self.step % 50 === 0) {
+    const mirroredHorizontally = self.atlas.mapIsHorizontallyMirrored();
 
-    // split the list up by unit to make it easy to prioritize targets
-    for (let i = 0; i < enemiesInRange.length; i++) {
-      enemyRobots[enemiesInRange[i].unit].push(enemiesInRange[i]);
-    }
+    // select a target by mirroring our location over
+    const target = { x: self.me.x, y: self.me.y };
 
-    // get the first enemy robot and attack it
-    for (const key in enemyRobots) {
-      if (enemyRobots[key].length > 0) {
-        const dX = enemyRobots[key][0].x - self.me.x;
-        const dY = enemyRobots[key][0].y - self.me.y;
-        return self.attack(dX, dY);
+    if (mirroredHorizontally) {
+      self.log("Modified x broadcast");
+      if (self.me.x > self.map.length / 2) {
+        target.x = Math.round(self.me.x - self.map.length / 2);
+      } else {
+        target.x = Math.round(self.map.length - self.me.x);
+      }
+    } else if (!mirroredHorizontally) {
+      self.log("Modified y broadcast");
+      if (self.me.y > self.map.length / 2) {
+        target.y = Math.round(self.me.y - self.map.length / 2);
+      } else {
+        target.y = Math.round(self.map.length - self.me.y);
       }
     }
-  }
 
-  // build a pilgrim for the first two turns
-  if (self.step <= 2) {
-    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
-  }
+    // calculate our signal
+    const signal = target.x * 256 + target.y;
 
-  const unit = self.buildCycle[self.buildIndex];
-  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
-    self.buildIndex++;
-    if (self.buildIndex >= self.buildCycle.length) {
-      self.buildIndex = 0;
+    if (self.fuel > 10 ** 2) {
+      // signal to everything on the map to target that enemy
+      self.log("BROADCAST " + signal + " " + target.x + " " + target.y);
+      self.broadcasted = true;
+      self.signal(signal, Math.ceil(10 ** 2));
     }
-    return buildOnRandomEmptyTile(unit, self);
+  }
+
+  // take turns with fellow castles so nobody monopolizes resources
+  if (self.rank === null) {
+    self.rank = self.network.syncCastles();
+    return null;
+  }
+
+  if (self.step % self.network.getNumCastles() !== self.rank) {
+    return null;
+  }
+
+  const enemy = self.tactician.getNearbyEnemy();
+  if (enemy !== null && self.tactician.enemyInRange(enemy)) {
+    return self.tactician.attackEnemy(enemy);
+  }
+
+  // priority build pilgrims until there's enough for all resource tiles on the map
+  // note that this is halved to account for resources in enemy terrain
+  // if pilgrims are killed more will be spawned because of the heartbeat
+  if (self.network.getNumPilgrims() < Math.floor(self.atlas.getNumResources() / 2)) {
+    if (self.haveResourcesToBuild(SPECS.PILGRIM)) {
+      return self.buildOnRandomEmptyTile(SPECS.PILGRIM);
+    }
+  }
+
+
+  // build crusaders if we can
+  if (self.haveResourcesToBuild(SPECS.CRUSADER)) { // random chance is so one castle doesn't hog all the resources
+    return self.buildOnRandomEmptyTile(SPECS.CRUSADER);
   }
 };
 

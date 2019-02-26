@@ -4,14 +4,27 @@ import castle from "./castle.js";
 import pilgrim from "./pilgrim.js";
 import crusader from "./crusader.js";
 import * as Constants from "./constants.js";
+import BinaryHeap from "./binaryHeap.js";
+import Atlas from "./atlas.js";
+import Tactician from "./tactician.js";
+import Network from "./network.js";
 
-// eslint-disable-next-line no-unused-vars
+
+// eslint-disable-next-line no-unused-lets
 class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
+    this.atlas = null;
+    this.tactician = null;
+    this.network = null;
+
     // general
     this.infant = true;
     this.traversedTiles = [];
+    this.destination = null;
+    this.path = null;
+    this.tempDestination = null;
+    this.moving = false;
 
     // pilgrim
     this.resourceMap = null;
@@ -19,19 +32,36 @@ class MyRobot extends BCAbstractRobot {
     this.castle = [-1, -1];
     this.resourceTiles = [];
     this.forbiddenResourceTiles = [];
+    this.buildBaseLocation = null;
 
     // prophet
     this.porcDestination = [-1, -1];
     this.inTransit = true;
 
+    // crusader
+    this.stashDest = [-1, -1];
+    this.phase = Constants.COMBAT_PHASE_IDLE;
+    this.attackDest = [-1, -1];
+
     // castle
     this.step = 0;
+    this.location = null;
+    this.willBuild = false;
+    this.nNearbyResources = 0;
+    this.nResources = 0;
+    this.turnsToSkip = 0;
+    this.rank = null;
+
+    this.robots = [];
+    this.broadcasted = false;
+    this.buildLastTurn = false;
+
     this.buildIndex = 0;
     this.buildCycle = [
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
-      SPECS.PROPHET,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
       SPECS.PILGRIM,
     ];
 
@@ -42,7 +72,58 @@ class MyRobot extends BCAbstractRobot {
     this.speed = -1;
   }
 
+  construct(unit, dX, dY) {
+    if (dX < -1 || dX > 1 || dY < -1 || dY > 1) {
+      return null;
+    }
+
+    if (unit === SPECS.CHURCH) {
+      if (
+        this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE &&
+        this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL
+      ) {
+        this.network.transmit(Constants.STATUS_BUILDING);
+        return this.buildUnit(unit, dX, dY);
+      }
+    } else if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
+      this.network.transmit(Constants.STATUS_BUILDING);
+      return this.buildUnit(unit, dX, dY);
+    }
+    return null;
+  }
+
+  harvest() {
+    this.network.transmit(Constants.STATUS_MINING);
+    return this.mine();
+  }
+
+  shoot(dX, dY) {
+    this.network.transmit(Constants.STATUS_ATTACKING);
+    return this.attack(dX, dY);
+  }
+
   turn() {
+    if (this.atlas === null) {
+      this.atlas = new Atlas(this);
+      this.atlas.initialize();
+    }
+    if (this.tactician === null) {
+      this.tactician = new Tactician(this);
+      this.tactician.initialize();
+    }
+    if (this.network === null) {
+      this.network = new Network(this);
+      this.network.initialize();
+    }
+
+    this.sanityCheck(); // this doesn't work for some reason. maybe it's just a replay bug?
+    this.atlas.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.tactician.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.network.update();
+
     if (this.myType === undefined) {
       switch (this.me.unit) {
         case SPECS.PROPHET:
@@ -61,150 +142,133 @@ class MyRobot extends BCAbstractRobot {
           this.myType = crusader;
           this.speed = Constants.CRUSADER_MOVE_SPEED;
           break;
+        case SPECS.CHURCH:
+          return null;
         default:
-          this.log("Unknown unit type" + this.me.unit);
+          this.log("Unknown unit type " + this.me.unit);
       }
     }
-    return this.myType.takeTurn(this);
+    if (this.myType !== undefined) {
+      return this.myType.takeTurn(this);
+    }
+    return null;
   }
 
-  _deepCopyMap(map) {
-    const copy = [];
-    for (let y = 0; y < map.length; y++) {
-      const row = [];
-      for (let x = 0; x < map[y].length; x++) {
-        row.push(map[y][x]);
-      }
-      copy.push(row);
+  sanityCheck() {
+    let insane = false;
+    if (this.location === null) {
+      this.location = { x: this.me.x, y: this.me.y };
     }
-    return copy;
+
+    // check if a castle or church moved
+    if (this.me.unit === SPECS.CASTLE || this.me.unit === SPECS.CHURCH) {
+      if (this.location.x !== this.me.x || this.location.y !== this.me.y) {
+        insane = true;
+      }
+    }
+
+    // check if a unit has negative fuel/karb
+    if (this.me.fuel < 0 || this.me.karbonite < 0) {
+      insane = true;
+    }
+
+    // check if our global fuel/karb pool is negative
+    if (this.fuel < 0 || this.karbonite < 0) {
+      insane = true;
+    }
+
+    // check if we're off the map
+    if (
+      this.me.x < 0 ||
+      this.me.y < 0 ||
+      this.me.y >= this.map.length ||
+      this.me.x >= this.map[0].length
+    ) {
+      insane = true;
+    }
+
+    // check if we're standing in impassable terrain
+    if (!this.map[this.me.y][this.me.x]) {
+      insane = true;
+    }
+
+    if (insane) {
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log(
+        "########################################################################"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "####                      !! BUG DETECTED !!                        ####"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "########################################################################"
+      );
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+    }
   }
 
-  // set each visible bot's tile to false
-  // do the same for our traversed tiles
-  _markImpassableTiles(bots, map) {
-    for (let i = 0; i < bots.length; i++) {
-      if (this._coordIsValid(bots[i].x, bots[i].y)) {
-        map[bots[i].y][bots[i].x] = false;
-      }
-    }
-
-    for (let i = 0; i < this.traversedTiles.length; i++) {
-      if (this._coordIsValid(this.traversedTiles[i][0], this.traversedTiles[i][1])) {
-        map[this.traversedTiles[i][1]][this.traversedTiles[i][0]] = false;
-      }
-    }
-  }
-
-  _coordIsValid(x, y) {
-    if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
+  // also adds in a buffer for churches in case pilgrims want to build them
+  haveResourcesToBuild(unit) {
+    if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
       return true;
     }
     return false;
   }
 
-  moveAdjacentToTarget(tX, tY) {
-    // check that we aren't already adjacent
-    const dX = this.me.x - tX;
-    const dY = this.me.y - tY;
-    if (dX >= -1 && dX <= 1 && dY >= -1 && dY <= 1) {
-      return null;
-    }
-
-
-    const opts = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, -1], [1, 0], [1, 1]];
-    const opt = opts[Math.floor(Math.random() * opts.length)];
-    return this.moveToTarget(tX + opt[0], tY + opt[1]);
-  }
-
-  sanitizeRet(ret) {
-    if (typeof ret === "string") {
-      return null;
-    }
-    return ret;
-  }
-
-  // move to the target x and y, but only one square at a time
-  moveToTarget(tX, tY) {
-    // if already at the target then no need to do anything;
-    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
-      this.traversedTiles = [];
-      return Constants.AT_TARGET;
-    }
-
-    // deep copy the terrain map so we can modify it
-    const terrain = this._deepCopyMap(this.map);
-
-    // mark all bot-filled tiles as impassable
-    const bots = this.getVisibleRobots();
-    this._markImpassableTiles(bots, terrain);
-
-    // for each adjacent tile, calculate the distance from it to the target
-    // if the tile is impassable then mark the distance as really really high so it won't ever be chosen
-    const dists = [];
+  buildOnRandomEmptyTile(unit) {
+    const validTiles = [];
+    const botMap = this.getVisibleRobotMap();
     for (let dY = -1; dY <= 1; dY++) {
-      const row = [];
       for (let dX = -1; dX <= 1; dX++) {
         const x = this.me.x + dX;
         const y = this.me.y + dY;
-        if (this._coordIsValid(x, y)) {
-          if (terrain[y][x] === false) {
-            row.push(9999);
-          } else {
-            row.push(((x - tX) ** 2 + (y - tY) ** 2) ** 0.5);
+        if (this.atlas._coordIsValid(x, y)) {
+          if (
+            this.map[y][x] &&
+            botMap[y][x] === 0 &&
+            !this.fuel_map[y][x] &&
+            !this.karbonite_map[y][x]
+          ) {
+            validTiles.push({ dX, dY });
           }
-        } else {
-          row.push(9999);
-        }
-      }
-      dists.push(row);
-    }
-
-    let bX = 0;
-    let bY = 0;
-    for (let i = 0; i < dists.length; i++) {
-      for (let j = 0; j < dists[i].length; j++) {
-        if (dists[i][j] < dists[bY][bX]) {
-          bX = j;
-          bY = i;
         }
       }
     }
 
-    // no legal movements -- robot is trapped and needs to backtrack
-    if (dists[bY][bX] === 9999) {
-      this.traversedTiles = [[this.me.x, this.me.y]];
-      return Constants.TRAPPED;
+    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
+    if (tile !== undefined) {
+      return this.construct(unit, tile.dX, tile.dY);
     }
-
-    // calculate deltas
-    const dX = bX - 1;
-    const dY = bY - 1;
-
-    // if we're about to move to the target then erase the slug trail, otherwise add the new tile to the trail
-    if (this.me.x + dX === tX && this.me.y + dY === tY) {
-      this.traversedTiles = [];
-    } else {
-      this.traversedTiles.push([this.me.x + dX, this.me.y + dY]);
-    }
-
-    return this.move(dX, dY);
-  }
-
-
-  getClosestReadyResource(tiles) {
-    let closest = -1;
-    let bestDist = 99999;
-    for (let i = 0; i < tiles.length; i++) {
-      if (tiles[i].state === Constants.RESOURCE_TILE_READY) {
-        const dist = (tiles[i].x - this.me.x) ** 2 + (tiles[i].y - this.me.y) ** 2;
-        if (dist < bestDist) {
-          closest = i;
-          bestDist = dist;
-        }
-      }
-    }
-
-    return closest;
+    return null;
   }
 }

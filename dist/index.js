@@ -253,200 +253,1604 @@ class BCAbstractRobot {
     }
 }
 
-const navigation = {};
+const PILGRIM_KARBONITE_CAPACITY = 20;
+const PILGRIM_FUEL_CAPACITY = 100;
+const PILGRIM_MOVE_SPEED = 2;
+const CRUSADER_MOVE_SPEED = 3;
+const PROPHET_MOVE_SPEED = 2;
 
-navigation.dirMove = (self, destination) => {
-  // self.log("destx " + destination[0] + "dy " + destination[1]);
-  // self.log("selfx " + self.me.x + "selfy " + self.me.y);
-  let dx = destination[0] - self.me.x;
-  let dy = destination[1] - self.me.y;
-  if (dx < 0) {
-    dx = -1;
-  } else {
-    dx = 1;
-  }
-  if (dy < 0) {
-    dy = -1;
-  } else {
-    dy = 1;
-  }
-  // self.log("dx " + dx + "dy " + dy);
-  return [dx, dy];
-};
 
-navigation.basicMove = (self, destination) => {
-  // self.log("destx " + destination[0] + "dy " + destination[1]);
-  return [destination[0], destination[1]];
-};
+const KARBONITE = "KARBONITE";
+const FUEL = "FUEL";
+const EMPTY = "EMPTY";
+
+const RESOURCE_TILE_BUSY = "BUSY";
+const RESOURCE_TILE_READY = "READY";
+
+const STATUS_IDLE = 1; // this starts at 1 to differentiate it from zero, which is no castle talk was sent at all
+const STATUS_BUILDING = STATUS_IDLE + 1;
+const STATUS_MINING = STATUS_BUILDING + 1;
+const STATUS_MOVING = STATUS_MINING + 1;
+const STATUS_ATTACKING = STATUS_MOVING + 1;
+
+
+const COMBAT_PHASE_IDLE = 1;
+const COMBAT_PHASE_SEARCH_AND_DESTROY = COMBAT_PHASE_IDLE + 1;
 
 const prophet = {};
 
+const tileIsPorced = (x, y, self) => {
+  const botMap = self.getVisibleRobotMap();
+  if (botMap[y][x] > 0) {
+    const bot = self.getRobot(botMap[y][x]).unit;
+    if (bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const getPorcDestination = (self) => {
+  const cX = self.me.x; // center x
+  const cY = self.me.y; // center y
+
+  const GRID_SPACE = 1;
+
+  // create a map of distances from our castle to available porc tiles
+  const botMap = self.getVisibleRobotMap();
+  const porcMap = [];
+  for (let y = 0; y < botMap.length; y++) {
+    const row = [];
+    for (let x = 0; x < botMap[y].length; x++) {
+      if (x % (GRID_SPACE + 1) === 0 && y % (GRID_SPACE + 1) === 0) {
+        if ((tileIsPorced(x, y, self)) || // can't build porc if there's already porc there
+          (self.karbonite_map[y][x]) || // don't build on karb
+          (self.fuel_map[y][x]) || // or fuel
+          (!self.map[y][x]) // can't build on a wall
+        ) {
+          row.push(99999);
+        } else {
+          row.push((x - cX) ** 2 + (y - cY) ** 2);
+        }
+      } else {
+        row.push(99999);
+      }
+    }
+    porcMap.push(row);
+  }
+
+  // pick the closest open tile
+  let bX = 0;
+  let bY = 0;
+  for (let y = 0; y < porcMap.length; y++) {
+    for (let x = 0; x < porcMap[y].length; x++) {
+      if (porcMap[y][x] < porcMap[bY][bX]) {
+        bX = x;
+        bY = y;
+      }
+    }
+  }
+
+  return [bX, bY];
+};
+
 prophet.takeTurn = (self) => {
-  const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-  const choice = choices[Math.floor(Math.random() * choices.length)];
-  const target = navigation.startMove(self, choice);
-  // self.log("trying to move to " + target);
-  return self.move(target.x, target.y);
+  const bots = self.getVisibleRobots();
+
+  if (self.infant) {
+    self.infant = false;
+
+    // save the first castle we see as our porc center to align the grid
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].unit === SPECS.CASTLE) {
+        self.castle = [bots[i].x, bots[i].y];
+      }
+    }
+
+    self.porcDestination = getPorcDestination(self);
+  }
+
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].team !== self.me.team) {
+      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.PROPHET].ATTACK_RADIUS) {
+        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+      }
+    }
+  }
+
+  if (self.inTransit) {
+    if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+      // if we're at our dest then stop moving
+      // if someone got there first then pick a new dest
+      const botMap = self.getVisibleRobotMap();
+      if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
+        if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
+          self.inTransit = false;
+        } else if (tileIsPorced(self.porcDestination[0], self.porcDestination[1], self)) {
+          self.porcDestination = getPorcDestination(self);
+        }
+      }
+
+      if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
+        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
+      }
+    }
+  }
+
+  return null;
+};
+
+var SPECS$1 = {
+  COMMUNICATION_BITS: 16,
+  CASTLE_TALK_BITS: 8,
+  MAX_ROUNDS: 1000,
+  TRICKLE_FUEL: 25,
+  INITIAL_KARBONITE: 100,
+  INITIAL_FUEL: 500,
+  MINE_FUEL_COST: 1,
+  KARBONITE_YIELD: 2,
+  FUEL_YIELD: 10,
+  MAX_TRADE: 1024,
+  MAX_BOARD_SIZE: 64,
+  MAX_ID: 4096,
+  CASTLE: 0,
+  CHURCH: 1,
+  PILGRIM: 2,
+  CRUSADER: 3,
+  PROPHET: 4,
+  PREACHER: 5,
+  RED: 0,
+  BLUE: 1,
+  CHESS_INITIAL: 100,
+  CHESS_EXTRA: 20,
+  TURN_MAX_TIME: 200,
+  MAX_MEMORY: 50000000,
+
+  UNITS: [{
+      CONSTRUCTION_KARBONITE: null,
+      CONSTRUCTION_FUEL: null,
+      KARBONITE_CAPACITY: null,
+      FUEL_CAPACITY: null,
+      SPEED: 0,
+      FUEL_PER_MOVE: null,
+      STARTING_HP: 200,
+      VISION_RADIUS: 100,
+      ATTACK_DAMAGE: 10,
+      ATTACK_RADIUS: [1, 64],
+      ATTACK_FUEL_COST: 10,
+      DAMAGE_SPREAD: 0,
+    },
+    {
+      CONSTRUCTION_KARBONITE: 50,
+      CONSTRUCTION_FUEL: 200,
+      KARBONITE_CAPACITY: null,
+      FUEL_CAPACITY: null,
+      SPEED: 0,
+      FUEL_PER_MOVE: null,
+      STARTING_HP: 100,
+      VISION_RADIUS: 100,
+      ATTACK_DAMAGE: 0,
+      ATTACK_RADIUS: 0,
+      ATTACK_FUEL_COST: 0,
+      DAMAGE_SPREAD: 0,
+    },
+    {
+      CONSTRUCTION_KARBONITE: 10,
+      CONSTRUCTION_FUEL: 50,
+      KARBONITE_CAPACITY: 20,
+      FUEL_CAPACITY: 100,
+      SPEED: 4,
+      FUEL_PER_MOVE: 1,
+      STARTING_HP: 10,
+      VISION_RADIUS: 100,
+      ATTACK_DAMAGE: null,
+      ATTACK_RADIUS: null,
+      ATTACK_FUEL_COST: null,
+      DAMAGE_SPREAD: null,
+    },
+    {
+      CONSTRUCTION_KARBONITE: 15,
+      CONSTRUCTION_FUEL: 50,
+      KARBONITE_CAPACITY: 20,
+      FUEL_CAPACITY: 100,
+      SPEED: 9,
+      FUEL_PER_MOVE: 1,
+      STARTING_HP: 40,
+      VISION_RADIUS: 49,
+      ATTACK_DAMAGE: 10,
+      ATTACK_RADIUS: [1, 16],
+      ATTACK_FUEL_COST: 10,
+      DAMAGE_SPREAD: 0,
+    },
+    {
+      CONSTRUCTION_KARBONITE: 25,
+      CONSTRUCTION_FUEL: 50,
+      KARBONITE_CAPACITY: 20,
+      FUEL_CAPACITY: 100,
+      SPEED: 4,
+      FUEL_PER_MOVE: 2,
+      STARTING_HP: 20,
+      VISION_RADIUS: 64,
+      ATTACK_DAMAGE: 10,
+      ATTACK_RADIUS: [16, 64],
+      ATTACK_FUEL_COST: 25,
+      DAMAGE_SPREAD: 0,
+    },
+    {
+      CONSTRUCTION_KARBONITE: 30,
+      CONSTRUCTION_FUEL: 50,
+      KARBONITE_CAPACITY: 20,
+      FUEL_CAPACITY: 100,
+      SPEED: 4,
+      FUEL_PER_MOVE: 3,
+      STARTING_HP: 60,
+      VISION_RADIUS: 16,
+      ATTACK_DAMAGE: 20,
+      ATTACK_RADIUS: [1, 16],
+      ATTACK_FUEL_COST: 15,
+      DAMAGE_SPREAD: 3,
+    },
+  ],
 };
 
 const castle = {};
 
 castle.takeTurn = (self) => {
-  if (self.karbonite >= 100) {
-    self.log("Building a pilgrim at " + (self.me.x + 1) + "," + (self.me.y + 1));
-    self.pilgrimsBuilt++;
-    return self.buildUnit(SPECS.PILGRIM, 1, 0);
+  self.step++;
+
+
+  if (self.step % 50 === 0) {
+    const mirroredHorizontally = self.atlas.mapIsHorizontallyMirrored();
+
+    // select a target by mirroring our location over
+    const target = { x: self.me.x, y: self.me.y };
+
+    if (mirroredHorizontally) {
+      self.log("Modified x broadcast");
+      if (self.me.x > self.map.length / 2) {
+        target.x = Math.round(self.me.x - self.map.length / 2);
+      } else {
+        target.x = Math.round(self.map.length - self.me.x);
+      }
+    } else if (!mirroredHorizontally) {
+      self.log("Modified y broadcast");
+      if (self.me.y > self.map.length / 2) {
+        target.y = Math.round(self.me.y - self.map.length / 2);
+      } else {
+        target.y = Math.round(self.map.length - self.me.y);
+      }
+    }
+
+    // calculate our signal
+    const signal = target.x * 256 + target.y;
+
+    if (self.fuel > 10 ** 2) {
+      // signal to everything on the map to target that enemy
+      self.log("BROADCAST " + signal + " " + target.x + " " + target.y);
+      self.broadcasted = true;
+      self.signal(signal, Math.ceil(10 ** 2));
+    }
   }
 
-  //if (self.karbonite > 200) {
-  //  return self.buildUnit(SPECS.CRUSADER, 1, 0);
-  //}
+  // take turns with fellow castles so nobody monopolizes resources
+  if (self.rank === null) {
+    self.rank = self.network.syncCastles();
+    return null;
+  }
 
-  return null;
+  if (self.step % self.network.getNumCastles() !== self.rank) {
+    return null;
+  }
+
+  const enemy = self.tactician.getNearbyEnemy();
+  if (enemy !== null && self.tactician.enemyInRange(enemy)) {
+    return self.tactician.attackEnemy(enemy);
+  }
+
+  // priority build pilgrims until there's enough for all resource tiles on the map
+  // note that this is halved to account for resources in enemy terrain
+  // if pilgrims are killed more will be spawned because of the heartbeat
+  if (self.network.getNumPilgrims() < Math.floor(self.atlas.getNumResources() / 2)) {
+    if (self.haveResourcesToBuild(SPECS$1.PILGRIM)) {
+      return self.buildOnRandomEmptyTile(SPECS$1.PILGRIM);
+    }
+  }
+
+
+  // build crusaders if we can
+  if (self.haveResourcesToBuild(SPECS$1.CRUSADER)) { // random chance is so one castle doesn't hog all the resources
+    return self.buildOnRandomEmptyTile(SPECS$1.CRUSADER);
+  }
 };
-
-const PILGRIM_KARBONITE_CAPACITY = 20;
-const PILGRIM_FUEL_CAPACITY = 100;
-const PILGRIM_MOVE_SPEED = 4;
-const CRUSADER_MOVE_SPEED = 9;
-const PROPHET_MOVE_SPEED = 4;
-
-const CASTLE = 0;
 
 const pilgrim = {};
 
 pilgrim.takeTurn = (self) => {
-  const bots = self.getVisibleRobots();
-
-  // save important info on the first cycle
+  // save important info on the first cycle of each trip
   if (self.infant) {
     self.infant = false;
-    self.origin = [self.me.x, self.me.y];
-    const visibleUnits = bots;
-    for (let i = 0; i < visibleUnits.length; i++) {
-      if (visibleUnits[i].unit === CASTLE) {
-        self.parentCastle = [visibleUnits[i].x, visibleUnits[i].y];
+
+    // this will be recalculated each round
+    self.resourceTile = self.atlas.getClosestReadyResource(self.resourceTiles);
+  }
+
+  self.atlas.saveParentBase();
+  self.atlas.updateResourceMap();
+
+  // mine resource if carrying space and on a relevant tile
+  if (self.atlas.tileIsKarbonite(self.me.x, self.me.y) && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+    // // self.log("Mine karb");
+    return self.harvest();
+  }
+  if (self.atlas.tileIsFuel(self.me.x, self.me.y) && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+    // // self.log("Mine fuel");
+    return self.harvest();
+  }
+
+  // pick the nearest available resource
+  // if it's the same one as our current one just keep moving to it
+  // otherwise switch to the new one
+  const newResourceTile = self.atlas.getClosestReadyResource();
+  if (newResourceTile !== null) {
+    if (newResourceTile.x === self.resourceTile.x && newResourceTile.y === self.resourceTile.y) {
+      if (self.atlas.moving) {
+        return self.atlas.continueMovement();
       }
+    } else {
+      self.resourceTile = newResourceTile;
     }
   }
 
-  // check to see if there's a bot that isn't us already on our resource tile
-  // if so, we need to pick a new resource tile
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].id !== self.me.id) {
-      if (bots[i].x === self.karbTile[0] && bots[i].y === self.karbTile[1]) {
-        self.forbiddenResourceTiles.push(self.karbTile);
-        self.karbTile = [-1, -1];
-      }
-      if (bots[i].x === self.fuelTile[0] && bots[i].y === self.fuelTile[1]) {
-        self.forbiddenResourceTiles.push(self.fuelTile);
-        self.fuelTile = [-1, -1];
-      }
+  if (self.resourceTile !== null) {
+    // move to karb if we have space
+    if (self.resourceTile.type === KARBONITE && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
+      // // self.log("Path to karb " + self.resourceTile.x + " " + self.resourceTile.y);
+      self.atlas.calculatePathToTarget(self.resourceTile.x, self.resourceTile.y);
+      return self.atlas.continueMovement();
+    }
+
+    // move to fuel if we have space
+    if (self.resourceTile.type === FUEL && self.me.fuel < PILGRIM_FUEL_CAPACITY) {
+      // self.log("Path to fuel " + self.resourceTile.x + " " + self.resourceTile.y);
+      self.atlas.calculatePathToTarget(self.resourceTile.x, self.resourceTile.y);
+      return self.atlas.continueMovement();
     }
   }
 
-  self.log(self.karbTile + " " + self.fuelTile + " forb: " + self.forbiddenResourceTiles);
-
-  // save resource tiles if necessary
-  if (self.karbTile[0] === -1 && self.karbTile[1] === -1) {
-    self.karbTile = self.getClosestResource(self.karbonite_map);
-  }
-  if (self.fuelTile[0] === -1 && self.fuelTile[1] === -1) {
-    self.fuelTile = self.getClosestResource(self.fuel_map);
-  }
-
-  // mine karb if space and on its tile
-  if ((self.me.x === self.karbTile[0]) && (self.me.y === self.karbTile[1]) && (self.me.karbonite < PILGRIM_KARBONITE_CAPACITY)) {
-    self.log("Mine karb");
-    return self.mine();
-  }
-
-  // mine fuel if space and on fuel tile
-  if ((self.me.x === self.fuelTile[0]) && (self.me.y === self.fuelTile[1]) && (self.me.fuel < PILGRIM_FUEL_CAPACITY)) {
-    self.log("Mine fuel");
-    return self.mine();
-  }
-
-  // move to karb
-  if (self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
-    self.log("Move to karb " + self.karbTile[0] + " " + self.karbTile[1]);
-    return self.moveToTarget(self.karbTile[0], self.karbTile[1]);
-  }
-
-  // move to fuel
-  if (self.me.fuel < PILGRIM_FUEL_CAPACITY) { // move to fuel
-    self.log("Move to fuel " + self.fuelTile[0] + " " + self.fuelTile[1]);
-    return self.moveToTarget(self.fuelTile[0], self.fuelTile[1]);
-  }
 
   // standing next to castle so wait to give it automatically
-  if ((self.me.x >= self.parentCastle[0] - 1) && (self.me.x <= self.parentCastle[0] + 1) && (self.me.y >= self.parentCastle[1] - 1) && (self.me.y <= self.parentCastle[1] + 1)) {
-    const dX = self.parentCastle[0] - self.me.x;
-    const dY = self.parentCastle[1] - self.me.y;
-    self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.parentCastle[0] + " " + self.parentCastle[1] + "  " + dX + " " + dY);
-    return self.give(dX, dY, 20, 100);
+  if (self.atlas.adjacentToBase(self.me.x, self.me.y)) {
+    const dX = self.atlas.base.x - self.me.x;
+    const dY = self.atlas.base.y - self.me.y;
+    // self.log("Depositing resources " + self.me.x + " " + self.me.y + "  " + self.atlas.base.x + " " + self.atlas.base.y + "  " + dX + " " + dY);
+
+    self.infant = true;
+    return self.give(dX, dY, self.me.karbonite, self.me.fuel);
+  }
+
+
+  // before going home see if we should build a base for this resource tile
+  if (self.buildBaseLocation === null && self.atlas.getBaseWithinRange(6) === null) {
+    self.buildBaseLocation = self.atlas.getOptimalBaseLocation(self.me.x, self.me.y);
+  }
+
+  if (self.buildBaseLocation !== null) {
+    if (!self.moving) {
+      self.atlas.calculatePathAdjacentToTarget(self.buildBaseLocation.x, self.buildBaseLocation.y);
+    }
+
+    if (self.moving) {
+      return self.atlas.continueMovement();
+    }
+    const dX = self.buildBaseLocation.x - self.me.x;
+    const dY = self.buildBaseLocation.y - self.me.y;
+    self.buildBaseLocation = null;
+    return self.construct(SPECS.CHURCH, dX, dY);
   }
 
   // go back home
-  self.log("Going home");
-  return self.moveToTarget(self.origin[0], self.origin[1]);
+  // self.log("Going home");
+  self.atlas.calculatePathAdjacentToTarget(self.atlas.base.x, self.atlas.base.y);
+  return self.atlas.continueMovement();
 };
 
 const crusader = {};
-crusader.takeTurn = (self) => {
-  // make directional choice - either given by castle? or enemy?
-  const visible = self.getVisibleRobots();
 
-  // get attackable robots
-  const attackable = visible.filter((r) => {
-    if (!self.isVisible(r)) {
-      return false;
+
+crusader.takeTurn = (self) => {
+  const bots = self.getVisibleRobots();
+
+  if (self.infant) {
+    self.infant = false;
+  }
+
+  // find out if there's an enemy to shoot
+  // if there is, either attack them or move closer to them
+  const enemy = self.tactician.getNearbyEnemy();
+  if (enemy !== null) {
+    return self.tactician.attackEnemy(enemy);
+  }
+
+  if (self.phase === COMBAT_PHASE_SEARCH_AND_DESTROY) {
+    if (self.atlas.moving) {
+      return self.atlas.continueMovement();
     }
 
-    const dist = Math.pow((r.x - self.me.x), 2) + Math.pow((r.y - self.me.y), 2);
-    if (r.team !== self.me.team &&
-      SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist &&
-      dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1]) {
+    const tX = Math.round(Math.random() * (self.map.length));
+    const tY = Math.round(Math.random() * (self.map.length));
+    self.atlas.calculatePathAdjacentToTarget(tX, tY);
+  } else {
+    // check if we've been signalled to switch to s&d mode
+    for (let i = 0; i < bots.length; i++) {
+      if (bots[i].team === self.me.team) {
+        if (bots[i].signal > 0) {
+          self.phase = COMBAT_PHASE_SEARCH_AND_DESTROY;
+          self.atlas.calculatePathAdjacentToTarget(Math.ceil(bots[i].signal / 256), bots[i].signal % 256);
+        }
+      }
+    }
+  }
+
+  if (self.atlas.moving) {
+    return self.atlas.continueMovement();
+  }
+
+  return self.atlas.moveToPorcGrid();
+};
+
+function BinaryHeap(scoreFunction) {
+  this.content = [];
+  this.scoreFunction = scoreFunction;
+}
+
+BinaryHeap.prototype = {
+  push: function (element) {
+    // Add the new element to the end of the array.
+    this.content.push(element);
+    // Allow it to bubble up.
+    this.bubbleUp(this.content.length - 1);
+  },
+
+  pop: function () {
+    // Store the first element so we can return it later.
+    var result = this.content[0];
+    // Get the element at the end of the array.
+    var end = this.content.pop();
+    // If there are any elements left, put the end element at the
+    // start, and let it sink down.
+    if (this.content.length > 0) {
+      this.content[0] = end;
+      this.sinkDown(0);
+    }
+    return result;
+  },
+
+  remove: function (node) {
+    var length = this.content.length;
+    // To remove a value, we must search through the array to find
+    // it.
+    for (var i = 0; i < length; i++) {
+      if (this.content[i] != node) continue;
+      // When it is found, the process seen in 'pop' is repeated
+      // to fill up the hole.
+      var end = this.content.pop();
+      // If the element we popped was the one we needed to remove,
+      // we're done.
+      if (i == length - 1) break;
+      // Otherwise, we replace the removed element with the popped
+      // one, and allow it to float up or sink down as appropriate.
+      this.content[i] = end;
+      this.bubbleUp(i);
+      this.sinkDown(i);
+      break;
+    }
+  },
+
+  size: function () {
+    return this.content.length;
+  },
+
+  bubbleUp: function (n) {
+    // Fetch the element that has to be moved.
+    var element = this.content[n],
+      score = this.scoreFunction(element);
+    // When at 0, an element can not go up any further.
+    while (n > 0) {
+      // Compute the parent element's index, and fetch it.
+      var parentN = Math.floor((n + 1) / 2) - 1,
+        parent = this.content[parentN];
+      // If the parent has a lesser score, things are in order and we
+      // are done.
+      if (score >= this.scoreFunction(parent))
+        break;
+
+      // Otherwise, swap the parent with the current element and
+      // continue.
+      this.content[parentN] = element;
+      this.content[n] = parent;
+      n = parentN;
+    }
+  },
+
+  sinkDown: function (n) {
+    // Look up the target element and its score.
+    var length = this.content.length,
+      element = this.content[n],
+      elemScore = this.scoreFunction(element);
+
+    while (true) {
+      // Compute the indices of the child elements.
+      var child2N = (n + 1) * 2,
+        child1N = child2N - 1;
+      // This is used to store the new position of the element,
+      // if any.
+      var swap = null;
+      // If the first child exists (is inside the array)...
+      if (child1N < length) {
+        // Look it up and compute its score.
+        var child1 = this.content[child1N],
+          child1Score = this.scoreFunction(child1);
+        // If the score is less than our element's, we need to swap.
+        if (child1Score < elemScore)
+          swap = child1N;
+      }
+      // Do the same checks for the other child.
+      if (child2N < length) {
+        var child2 = this.content[child2N],
+          child2Score = this.scoreFunction(child2);
+        if (child2Score < (swap == null ? elemScore : child1Score))
+          swap = child2N;
+      }
+
+      // No need to swap further, we are done.
+      if (swap == null) break;
+
+      // Otherwise, swap and continue.
+      this.content[n] = this.content[swap];
+      this.content[swap] = element;
+      n = swap;
+    }
+  }
+};
+
+// eslint-disable-next-line no-unused-lets
+class Atlas {
+  constructor(robot) {
+    this.map = null;
+    this.fuelMap = null;
+    this.karbMap = null;
+    this.resourceMap = null;
+    this.resourceTiles = null;
+    this.owner = robot;
+
+    this.robots = null;
+    this.robotMap = null;
+
+    this.moving = false;
+    this.destination = null;
+    this.path = null;
+    this.tempDestination = null;
+    this.base = null;
+    this.team = null;
+
+    this.stationary = false;
+    this.porcDestination = null;
+    this.pos = null;
+
+    this.nResources = -1;
+  }
+
+  initialize() {
+    this.map = this.owner.map;
+    this.fuelMap = this.owner.fuel_map;
+    this.karbMap = this.owner.karbonite_map;
+    this.team = this.owner.me.team;
+    this.initializeResources();
+  }
+
+  // merge the resource maps and also create a list of the tiles
+  initializeResources() {
+    this.resourceMap = [];
+    this.resourceTiles = [];
+    for (let y = 0; y < this.karbMap.length; y++) {
+      const row = [];
+      for (let x = 0; x < this.karbMap[y].length; x++) {
+        if (this.karbMap[y][x]) {
+          row.push(KARBONITE);
+          this.resourceTiles.push({
+            x,
+            y,
+            state: RESOURCE_TILE_READY,
+            type: KARBONITE,
+          });
+        } else if (this.fuelMap[y][x]) {
+          row.push(FUEL);
+          this.resourceTiles.push({
+            x,
+            y,
+            state: RESOURCE_TILE_READY,
+            type: FUEL,
+          });
+        } else {
+          row.push(EMPTY);
+        }
+      }
+      this.resourceMap.push(row);
+    }
+  }
+
+  // must be called every round
+  update(robots, robotMap) {
+    this.robots = robots;
+    this.robotMap = robotMap;
+    this.pos = {
+      x: this.owner.me.x,
+      y: this.owner.me.y,
+    };
+  }
+
+  // update our resource map
+  // tiles in vision without robots get set to ready
+  // tiles in vision with robots get set to busy
+  updateResourceMap() {
+    for (let y = 0; y < this.robotMap.length; y++) {
+      for (let x = 0; x < this.robotMap[y].length; x++) {
+        if (this.resourceMap[y][x].type !== EMPTY) {
+          // find the relevant resource tile
+          let index = -1;
+          for (let j = 0; j < this.resourceTiles.length; j++) {
+            if (this.resourceTiles[j].x === x && this.resourceTiles[j].y === y) {
+              index = j;
+            }
+          }
+          if (index >= 0) {
+            if (this.robotMap[y][x] === 0 || this.robotMap[y][x] === this.owner.me.id) {
+              this.resourceTiles[index].state = RESOURCE_TILE_READY;
+            } else if (this.robotMap[y][x] > 0) {
+              this.resourceTiles[index].state = RESOURCE_TILE_BUSY;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  getNumResources() {
+    if (this.nResources === -1) {
+      this.nResources = 0;
+      for (let y = 0; y < this.map.length; y++) {
+        for (let x = 0; x < this.map.length; x++) {
+          if (this.karbMap[y][x] || this.fuelMap[y][x]) {
+            this.nResources++;
+          }
+        }
+      }
+    }
+    return this.nResources;
+  }
+
+  getBaseWithinRange(range) {
+    for (let y = this.owner.me.y - range; y <= this.owner.me.y + range; y++) {
+      for (let x = this.owner.me.x - range; x <= this.owner.me.x + range; x++) {
+        if (this._coordIsValid(x, y)) {
+          if (this.robotMap[y][x] > 0) {
+            const bot = this.getRobot(this.robotMap[y][x]);
+            if (bot !== null) {
+              if (bot.unit === SPECS$1.CHURCH || bot.unit === SPECS$1.CASTLE) {
+                return bot;
+              }
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  getOptimalBaseLocation(cX, cY) {
+    const MAX_RADIUS = 4;
+    const cluster = [];
+
+    // group nearby resource tiles into clusters
+    for (let y = cY - MAX_RADIUS; y <= cY + MAX_RADIUS; y++) {
+      for (let x = cX - MAX_RADIUS; x <= cX + MAX_RADIUS; x++) {
+        if (this._coordIsValid(x, y) && this.resourceMap[y][x] !== EMPTY) {
+          cluster.push({ x, y });
+        }
+      }
+    }
+
+    // find the best place to build a base for the cluster
+    let base = null;
+
+    // find rectangle that contains the cluster
+    let x1 = 999;
+    let x2 = 0;
+    let y1 = 999;
+    let y2 = 0;
+
+    for (let i = 0; i < cluster.length; i++) {
+      if (cluster[i].x < x1) {
+        x1 = cluster[i].x;
+      }
+      if (cluster[i].x > x2) {
+        x2 = cluster[i].x;
+      }
+      if (cluster[i].y < y1) {
+        y1 = cluster[i].y;
+      }
+      if (cluster[i].y > y2) {
+        y2 = cluster[i].y;
+      }
+    }
+
+
+    // calculate avg dist from each potential place to all tiles in the cluster
+    const potentialBases = [];
+    for (let y = y1 - 1; y <= y2 + 1; y++) {
+      for (let x = x1 - 1; x <= x2 + 1; x++) {
+        if (this._coordIsValid(x, y) && this.resourceMap[y][x] === EMPTY) {
+          let sum = 0;
+          for (let j = 0; j < cluster.length; j++) {
+            sum += ((y - cluster[j].y) ** 2 + (x - cluster[j].x) ** 2) ** 0.5;
+          }
+          potentialBases.push({ x, y, avgDist: (sum / cluster.length) });
+        }
+      }
+    }
+
+    // pick the place that has the smallest avg dist
+    let best = 0;
+    for (let j = 0; j < potentialBases.length; j++) {
+      if (potentialBases[j].avgDist < potentialBases[best].avgDist) {
+        best = j;
+      }
+    }
+    if (potentialBases[best] !== undefined) {
+      base = potentialBases[best];
+    }
+
+    return base;
+  }
+
+  // base means castle or church
+  getVisibleBase() {
+    const range = SPECS$1.UNITS[this.owner.me.unit].VISION_RADIUS;
+    return this.getBaseWithinRange(range);
+  }
+
+  getRobot(id) {
+    return this.owner.getRobot(id);
+  }
+
+  moveWrapper(dX, dY) {
+    this.owner.network.transmit(STATUS_MOVING); // this really ought to be refactored
+    return this.owner.move(dX, dY);
+  }
+
+  mapIsHorizontallyMirrored() {
+    for (let y = 0; y < this.map.length; y++) {
+      for (let x = 0; x < this.map.length; x++) {
+        if (this.map[y][x] !== this.map[y][this.map.length - x - 1]) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  saveParentBase() {
+    for (let i = 0; i < this.robots.length; i++) {
+      if (this.robots[i].unit === SPECS$1.CASTLE || this.robots[i].unit === SPECS$1.CHURCH) {
+        if (this.robots[i].team === this.team) {
+          this.base = this.robots[i];
+        }
+      }
+    }
+  }
+
+  tileIsFuel(x, y) {
+    if (this.resourceMap[y][x] === FUEL) {
       return true;
     }
     return false;
-  });
-  if (attackable.length > 0) {
-    // attack first robot
-    const r = attackable[0];
-    // self.log("" + r);
-    // self.log("attacking! " + r + " at loc " + (r.x - self.me.x, r.y - self.me.y));
-    return self.attack(r.x - self.me.x, r.y - self.me.y);
   }
 
-  // make random move to start
-  const choices = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-  const choice = choices[Math.floor(Math.random() * choices.length)];
-  const target = navigation.basicMove(self, choice);
-  // self.log("trying to move to " + target);
-  return self.move(target[0], target[1]);
-};
+  tileIsKarbonite(x, y) {
+    if (this.resourceMap[y][x] === KARBONITE) {
+      return true;
+    }
+    return false;
+  }
 
-// eslint-disable-next-line no-unused-vars
+  adjacentToBase(x, y) {
+    const maxX = this.map[0].length - 1;
+    const maxY = this.map.length - 1;
+    const minX = 0;
+    const minY = 0;
+
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        if (x + dX >= minX && x + dX <= maxX && y + dY >= minY && y + dY <= maxY) {
+          const bot = this.getRobot(this.robotMap[y + dY][x + dX]);
+
+          if (bot !== null && (bot.unit === SPECS$1.CASTLE || bot.unit === SPECS$1.CHURCH)) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  coordIsAdjacentToResource(x, y) {
+    const maxX = this.karbonite_map[0].length - 1;
+    const maxY = this.karbonite_map.length - 1;
+    const minX = 0;
+    const minY = 0;
+    if (
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x - 1]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x + 1]) ||
+      (y + 1 <= maxY && x - 1 <= maxX && x - 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 0][x - 1]) ||
+      (y + 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y + 1 >= minY && this.karbonite_map[y + 1][x + 0]) ||
+      (y - 1 <= maxY && x + 1 <= maxX && x + 1 >= minX && y - 1 >= minY && this.karbonite_map[y - 1][x + 0])
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  _coordIsValid(x, y) {
+    if (x >= 0 && x < this.map[0].length && y >= 0 && y < this.map.length) {
+      return true;
+    }
+    return false;
+  }
+
+  calculatePathAdjacentToTarget(tX, tY) {
+    // check that we aren't already adjacent
+    const dX = this.owner.me.x - tX;
+    const dY = this.owner.me.y - tY;
+    if (dX >= -1 && dX <= 1 && dY >= -1 && dY <= 1) {
+      return null;
+    }
+
+    const opts = [
+      { dX: -1, dY: -1, dist: 9999 },
+      { dX: -1, dY: 0, dist: 9999 },
+      { dX: -1, dY: 1, dist: 9999 },
+      { dX: 0, dY: -1, dist: 9999 },
+      { dX: 0, dY: 0, dist: 9999 },
+      { dX: 0, dY: 1, dist: 9999 },
+      { dX: 1, dY: -1, dist: 9999 },
+      { dX: 1, dY: 0, dist: 9999 },
+      { dX: 1, dY: 1, dist: 9999 },
+    ];
+
+    for (let i = 0; i < opts.length; i++) {
+      const x = tX + opts[i].dX;
+      const y = tY + opts[i].dY;
+
+      if (this.tileIsBlocked({ x, y })) {
+        opts[i].dist = 99999;
+      } else {
+        opts[i].dist = ((x - this.owner.me.x) ** 2 + (y - this.owner.me.y) ** 2) ** 0.5;
+      }
+    }
+
+    let best = 0;
+    for (let i = 0; i < opts.length; i++) {
+      if (opts[i].dist < opts[best].dist) {
+        best = i;
+      }
+    }
+
+
+    const opt = opts[best]; // opts[Math.floor(Math.random() * opts.length)];
+    return this.calculatePathToTarget(tX + opt.dX, tY + opt.dY);
+  }
+
+  tileIsBlocked(tile) {
+    // null tile can't be blocked
+    if (tile.x === null || tile.y === null) {
+      return false;
+    }
+
+    // if tile is offscreen consider it blocked
+    if (tile.x < 0 || tile.x > this.map[0].length - 1 || tile.y < 0 || tile.y > this.map[1].length - 1) {
+      return true;
+    }
+
+    // if we're on the tile it's not blocked to us
+    if (this.owner.me.x === tile.x && this.owner.me.y === tile.y) {
+      return false;
+    }
+
+    // if impassable or someone is on it, it's blocked
+    if (!this.map[tile.y][tile.x] || this.robotMap[tile.y][tile.x] > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  recalculatePathIfNecessary() {
+    if (this.path === null) {
+      this.path = this.search(this.map, [this.owner.me.x, this.owner.me.y], [this.destination.x, this.destination.y], false, this.manhattan);
+      if (this.path.length === 0) {
+        this.moving = false;
+      }
+    }
+  }
+
+  continueMovement() {
+    // check if arrived at ultimate goal
+    if (this.owner.me.x === this.destination.x && this.owner.me.y === this.destination.y) {
+      //  this.log("Movement over");
+      this.moving = false;
+      return null;
+    }
+
+    // check if arrived at subgoal
+    if (this.tempDestination !== null && this.owner.me.x === this.tempDestination.x && this.owner.me.y === this.tempDestination.y) {
+      this.tempDestination = null;
+    }
+
+    this.recalculatePathIfNecessary();
+
+    // pick a new subgoal if necessary
+    if (this.path.length > 0 && this.tempDestination === null) {
+      let index = 0;
+      let dist = 999999;
+      for (let i = 0; i < this.path.length; i++) {
+        const thisDist = ((this.path[i].x - this.path[index].x) ** 2 + (this.path[i].y - this.path[index].y) ** 2);
+        if (thisDist < dist) {
+          dist = thisDist;
+          index = i;
+        }
+      }
+
+      this.tempDestination = this.path[index];
+      this.path.splice(index, 1);
+    }
+
+    if (this.tempDestination !== null) {
+      // check if something or someone is in our way and recalc path if necessary
+      if (!this.map[this.tempDestination.y][this.tempDestination.x] || this.robotMap[this.tempDestination.y][this.tempDestination.x] > 0) {
+        this.tempDestination = null;
+        this.path = null;
+        this.recalculatePathIfNecessary();
+      } else {
+        // move to the subgoal
+        // this.log("Move to: [" + this.tempDestination.x + " " + this.tempDestination.y + "] from [" + this.owner.me.x + " " + this.owner.me.y + "] with deltas [" + (this.tempDestination.x - this.owner.me.x) + " " + (this.tempDestination.y - this.owner.me.y) + "]");
+        // this.logPath();
+        return this.moveWrapper(this.tempDestination.x - this.owner.me.x, this.tempDestination.y - this.owner.me.y);
+      }
+    }
+    return null;
+  }
+
+  // move to the target x and y, but only one square at a time
+  calculatePathToTarget(tX, tY) {
+    //  this.log("Movement begun");
+    this.moving = true;
+    this.destination = { x: tX, y: tY };
+    this.path = this.search(this.map, [this.owner.me.x, this.owner.me.y], [this.destination.x, this.destination.y], false, this.manhattan);
+    if (this.path.length === 0) {
+      this.moving = false;
+    }
+  }
+
+  logPath() {
+    if (this.path === null) {
+      this.owner.log("null");
+    } else {
+      let str = "";
+      for (let i = 0; i < this.path.length; i++) {
+        str += "[" + this.path[i].x + " " + this.path[i].y + "]";
+        if (i < this.path.length - 1) {
+          str += "->";
+        }
+      }
+      this.owner.log(str);
+    }
+  }
+
+  getClosestReadyResource() {
+    let closest = -1;
+    let bestDist = 99999;
+    for (let i = 0; i < this.resourceTiles.length; i++) {
+      if (this.resourceTiles[i].state === RESOURCE_TILE_READY) {
+        const dist = (this.resourceTiles[i].x - this.owner.me.x) ** 2 + (this.resourceTiles[i].y - this.owner.me.y) ** 2;
+        if (dist < bestDist) {
+          closest = i;
+          bestDist = dist;
+        }
+      }
+    }
+
+    if (closest === -1) {
+      return null;
+    }
+    return this.resourceTiles[closest];
+  }
+
+  // astar helper
+  init(map) {
+    const grid = [];
+    for (let y = 0; y < map.length; y++) {
+      const row = [];
+      for (let x = 0; x < map[y].length; x++) {
+        const node = {};
+        node.f = 0;
+        node.g = 0;
+        node.h = 0;
+        node.blocked = this.tileIsBlocked({ x, y });
+        node.x = x;
+        node.y = y;
+        node.cost = 1;
+        node.visited = false;
+        node.closed = false;
+        node.parent = null;
+        row.push(node);
+      }
+      grid.push(row);
+    }
+    return grid;
+  }
+
+  // astar helper
+  heap() {
+    return new BinaryHeap((node) => {
+      return node.f;
+    });
+  }
+
+  // calculatePathToTarget helper, executes astar to find a path
+  search(map, start, end, diagonal, heuristic) {
+    const grid = this.init(map);
+    start = grid[start[1]][start[0]];
+    end = grid[end[1]][end[0]];
+    heuristic = this.manhattan;
+    diagonal = true;
+
+    const openHeap = this.heap();
+
+    openHeap.push(start);
+
+    while (openHeap.size() > 0) {
+      // Grab the lowest f(x) to process next.  Heap keeps this sorted for us.
+      const currentNode = openHeap.pop();
+
+      // End case -- result has been found, return the traced path.
+      if (currentNode.x === end.x && currentNode.y === end.y) {
+        let curr = currentNode;
+        const ret = [];
+        while (curr.parent) {
+          ret.push(curr);
+          curr = curr.parent;
+        }
+        return ret.reverse();
+      }
+
+      // Normal case -- move currentNode from open to closed, process each of its neighbors.
+      currentNode.closed = true;
+
+      // Find all neighbors for the current node. Optionally find diagonal neighbors as well (false by default).
+      const neighbors = this.neighbors(grid, currentNode, diagonal);
+
+      for (let i = 0; i < neighbors.length; i++) {
+        const neighbor = neighbors[i];
+
+        if (neighbor.closed || neighbor.blocked) {
+          // Not a valid node to process, skip to next neighbor.
+          continue;
+        }
+
+        // The g score is the shortest distance from start to current node.
+        // We need to check if the path we have arrived at this neighbor is the shortest one we have seen yet.
+        const gScore = currentNode.g + neighbor.cost;
+        const beenVisited = neighbor.visited;
+
+        if (!beenVisited || gScore < neighbor.g) {
+          // Found an optimal (so far) path to this node.  Take score for node to see how good it is.
+          neighbor.visited = true;
+          neighbor.parent = currentNode;
+          neighbor.h = neighbor.h || heuristic(neighbor, end);
+          neighbor.g = gScore;
+          neighbor.f = neighbor.g + neighbor.h;
+
+          if (!beenVisited) {
+            // Pushing to heap will put it in proper place based on the 'f' value.
+            openHeap.push(neighbor);
+          } else {
+            // Already seen the node, but since it has been rescored we need to reorder it in the heap
+            openHeap.remove(neighbor);
+            openHeap.push(neighbor);
+          }
+        }
+      }
+    }
+
+    // No result was found - empty array signifies failure to find path.
+    //  this.owner.log("failed attempt start: [" + start.x + " " + start.y + "] end: [" + end.x + " " + end.y + "]");
+    return [];
+  }
+
+  // astar helper
+  manhattan(pos0, pos1) {
+    // See list of heuristics: http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+
+    const d1 = Math.abs(pos1.x - pos0.x);
+    const d2 = Math.abs(pos1.y - pos0.y);
+    return d1 + d2;
+  }
+
+  // astar helper
+  neighbors(grid, node, diagonals) {
+    const ret = [];
+    const x = node.x;
+    const y = node.y;
+
+    // West
+    if (grid[y - 1] && grid[y - 1][x]) {
+      ret.push(grid[y - 1][x]);
+    }
+
+    // East
+    if (grid[y + 1] && grid[y + 1][x]) {
+      ret.push(grid[y + 1][x]);
+    }
+
+    // South
+    if (grid[y] && grid[y][x - 1]) {
+      ret.push(grid[y][x - 1]);
+    }
+
+    // North
+    if (grid[y] && grid[y][x + 1]) {
+      ret.push(grid[y][x + 1]);
+    }
+
+    if (diagonals) {
+      // Southwest
+      if (grid[y - 1] && grid[y - 1][x - 1]) {
+        ret.push(grid[y - 1][x - 1]);
+      }
+
+      // Southeast
+      if (grid[y + 1] && grid[y + 1][x - 1]) {
+        ret.push(grid[y + 1][x - 1]);
+      }
+
+      // Northwest
+      if (grid[y - 1] && grid[y - 1][x + 1]) {
+        ret.push(grid[y - 1][x + 1]);
+      }
+
+      // Northeast
+      if (grid[y + 1] && grid[y + 1][x + 1]) {
+        ret.push(grid[y + 1][x + 1]);
+      }
+    }
+    return ret;
+  }
+
+
+  getPorcDestination() {
+    const cX = this.pos.x; // center x
+    const cY = this.pos.y; // center y
+
+    const GRID_SPACE = 1;
+
+    // create a map of distances from our castle to available porc tiles
+    const botMap = this.robotMap;
+    const porcMap = [];
+    for (let y = 0; y < botMap.length; y++) {
+      const row = [];
+      let offset = 0;
+      if (y % 2 === 0) {
+        offset = 1;
+      }
+      for (let x = 0; x < botMap[y].length; x++) {
+        if ((x - offset) % (GRID_SPACE + 1) === 0) {
+          if ((this.tileIsPorced(x, y)) || // can't build porc if there's already porc there
+            (this.karbMap[y][x]) || // don't build on karb
+            (this.fuelMap[y][x]) || // or fuel
+            (!this.map[y][x]) // can't build on a wall
+          ) {
+            row.push(99999);
+          } else {
+            row.push((x - cX) ** 2 + (y - cY) ** 2);
+          }
+        } else {
+          row.push(99999);
+        }
+      }
+      porcMap.push(row);
+    }
+
+    // pick the closest open tile
+    let bX = 0;
+    let bY = 0;
+    for (let y = 0; y < porcMap.length; y++) {
+      for (let x = 0; x < porcMap[y].length; x++) {
+        if (porcMap[y][x] < porcMap[bY][bX]) {
+          bX = x;
+          bY = y;
+        }
+      }
+    }
+
+    return [bX, bY];
+  }
+
+
+  tileIsPorced(x, y) {
+    // don't porc next to bases cuz they'll get walled in
+    if (this.adjacentToBase(x, y)) {
+      return true;
+    }
+
+
+    const botMap = this.robotMap;
+    if (botMap[y][x] > 0) {
+      const bot = this.getRobot(botMap[y][x]).unit;
+      if (bot === SPECS$1.CRUSADER || bot === SPECS$1.CASTLE || bot === SPECS$1.CHURCH) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+
+  moveToPorcGrid() {
+    if (!this.stationary) {
+      if (this.porcDestination === null) {
+        this.porcDestination = this.getPorcDestination();
+      }
+      if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
+        // if we're at our dest then stop moving
+        // if someone got there first then pick a new dest
+        if (this.robotMap[this.porcDestination[1]][this.porcDestination[0]] > 0) {
+          if (this.pos.x === this.porcDestination[0] && this.pos.y === this.porcDestination[1]) {
+            this.stationary = true;
+          } else if (this.tileIsPorced(this.porcDestination[0], this.porcDestination[1])) {
+            this.porcDestination = this.getPorcDestination();
+            this.moving = false;
+          }
+        }
+
+        if (this.moving) {
+          return this.continueMovement();
+        }
+        if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
+          this.calculatePathToTarget(this.porcDestination[0], this.porcDestination[1]);
+          return this.continueMovement();
+        }
+      }
+    }
+    return null;
+  }
+
+
+}
+
+// eslint-disable-next-line no-unused-lets
+class Tactician {
+  constructor(owner) {
+    this.robots = null;
+    this.robotMap = null;
+    this.owner = owner;
+    this.curPos = null;
+    this.unit = null;
+    this.team = null;
+    this.fuel = null;
+    this.atlas = null;
+
+
+    this.target = null;
+    this.stage = COMBAT_PHASE_IDLE;
+  }
+
+  update(robots, robotMap) {
+    this.robots = robots;
+    this.robotMap = robotMap;
+    this.pos = {
+      x: this.owner.me.x,
+      y: this.owner.me.y,
+    };
+    this.fuel = this.owner.fuel;
+    this.unit = this.owner.me.unit;
+    this.team = this.owner.me.team;
+    this.atlas = this.owner.atlas;
+  }
+
+  initialize() {
+    this.update(this.owner.getVisibleRobots(), this.owner.getVisibleRobotMap());
+  }
+
+  activate(target) {
+    this.stage = COMBAT_PHASE_SEARCH_AND_DESTROY;
+    this.target = target;
+  }
+
+  getNearbyEnemies() {
+    // get all robots within range
+    return this.robots.filter((robot) => {
+      const dist = (this.pos.x - robot.x) ** 2 + (this.pos.y - robot.y) ** 2;
+      const maxRange = SPECS$1.UNITS[this.unit].VISION_RADIUS;
+      if (this.team !== robot.team && dist <= maxRange) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  getNearbyEnemy() {
+    const enemies = this.getNearbyEnemies();
+    // attack enemies in order of prophet > preacher > crusader > pilgrim
+    if (enemies.length > 0 && this.fuel >= 10) {
+      // break the list of attackable robots down by unit type
+      const enemyRobots = {
+        [SPECS$1.PROPHET]: [],
+        [SPECS$1.PREACHER]: [],
+        [SPECS$1.CRUSADER]: [],
+        [SPECS$1.PILGRIM]: [],
+        [SPECS$1.CASTLE]: [],
+        [SPECS$1.CHURCH]: [],
+      };
+
+      // split the list up by unit to make it easy to prioritize targets
+      for (let i = 0; i < enemies.length; i++) {
+        enemyRobots[enemies[i].unit].push(enemies[i]);
+      }
+
+      // get the first enemy robot
+      for (const key in enemyRobots) {
+        if (enemyRobots[key].length > 0) {
+          return enemyRobots[key][0];
+        }
+      }
+    }
+    return null;
+  }
+
+  enemyInRange(enemy) {
+    const dist = ((enemy.x - this.pos.x) ** 2 + (enemy.y - this.pos.y) ** 2);
+
+    if (dist >= SPECS$1.UNITS[this.unit].ATTACK_RADIUS[0] && dist <= SPECS$1.UNITS[this.unit].ATTACK_RADIUS[1]) {
+      return true;
+    }
+    return false;
+  }
+
+  // only attack if not on the same team
+  // if out of range, move closer
+  attackEnemy(enemy) {
+    const dX = enemy.x - this.pos.x;
+    const dY = enemy.y - this.pos.y;
+    const dist = (dX ** 2 + dY ** 2);
+
+    if (this.team !== enemy.team) {
+      if (dist >= SPECS$1.UNITS[this.unit].ATTACK_RADIUS[0] && dist <= SPECS$1.UNITS[this.unit].ATTACK_RADIUS[1]) {
+        return this.owner.attack(dX, dY);
+      }
+
+      this.atlas.calculatePathAdjacentToTarget(enemy.x, enemy.y);
+      return this.atlas.continueMovement();
+    }
+    return null;
+  }
+}
+
+// eslint-disable-next-line no-unused-lets
+class Network {
+  constructor(owner) {
+    this.robots = null;
+    this.owner = owner;
+
+    this.sentSync = false;
+    this.units = [];
+  }
+
+  update() {
+    this.transmit(STATUS_IDLE);
+    this.robots = this.owner.getVisibleRobots();
+    this.countRobots();
+  }
+
+  transmit(value) {
+    this.owner.castleTalk(this.owner.me.unit * 32 + value);
+  }
+
+  syncCastles() {
+    if (!this.sentSync) {
+      this.transmit(this.owner.me.id % 32);
+      this.sentSync = true;
+    } else {
+      let rank = 0;
+      for (let i = 0; i < this.units[SPECS$1.CASTLE].length; i++) {
+        const state = this.units[SPECS$1.CASTLE][i];
+
+        if (this.owner.me.id % 32 > state) {
+          rank++;
+        }
+      }
+      return rank;
+    }
+    return null;
+  }
+
+
+  countRobots() {
+    this.units = [];
+    for (let i = 0; i < 6; i++) {
+      this.units.push([]);
+    }
+
+    for (let i = 0; i < this.robots.length; i++) {
+      const data = this.robots[i].castle_talk;
+      if (data !== undefined && data !== 0) { // if it's zero then the robot is an infant and hasn't transmitted anything
+        const unit = Math.floor(data / 32);
+        const state = data % 32;
+        this.units[unit].push(state);
+      }
+    }
+  }
+
+  getNumCastles() {
+    return this.units[SPECS$1.CASTLE].length;
+  }
+
+  getNumCrusaders() {
+    return this.units[SPECS$1.CRUSADER].length;
+  }
+
+  getNumPilgrims() {
+    return this.units[SPECS$1.PILGRIM].length;
+  }
+
+  getNumPreachers() {
+    return this.units[SPECS$1.PREACHER].length;
+  }
+
+  getNumProphets() {
+    return this.units[SPECS$1.PROPHET].length;
+  }
+
+  getNumChurches() {
+    return this.units[SPECS$1.CHURCH].length;
+  }
+
+
+  initialize() {
+    this.update(this.owner.getVisibleRobots());
+  }
+
+
+}
+
+// eslint-disable-next-line no-unused-lets
 class MyRobot extends BCAbstractRobot {
   constructor() {
     super();
-    this.forbiddenResourceTiles = [];
-    this.karbTile = [-1, -1];
-    this.fuelTile = [-1, -1];
-    this.parentCastle = [-1, -1];
-    this.origin = [-1, -1];
+    this.atlas = null;
+    this.tactician = null;
+    this.network = null;
+
+    // general
     this.infant = true;
+    this.traversedTiles = [];
+    this.destination = null;
+    this.path = null;
+    this.tempDestination = null;
+    this.moving = false;
+
+    // pilgrim
+    this.resourceMap = null;
+    this.resourceTile = -1; // index into this.resourceTiles
+    this.castle = [-1, -1];
+    this.resourceTiles = [];
+    this.forbiddenResourceTiles = [];
+    this.buildBaseLocation = null;
+
+    // prophet
+    this.porcDestination = [-1, -1];
+    this.inTransit = true;
+
+    // crusader
+    this.stashDest = [-1, -1];
+    this.phase = COMBAT_PHASE_IDLE;
+    this.attackDest = [-1, -1];
+
+    // castle
+    this.step = 0;
+    this.location = null;
+    this.willBuild = false;
+    this.nNearbyResources = 0;
+    this.nResources = 0;
+    this.turnsToSkip = 0;
+    this.rank = null;
+
+    this.robots = [];
+    this.broadcasted = false;
+    this.buildLastTurn = false;
+
+    this.buildIndex = 0;
+    this.buildCycle = [
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.CRUSADER,
+      SPECS.PILGRIM,
+    ];
 
     this.pendingRecievedMessages = {};
     this.enemyCastles = [];
     this.myType = undefined;
-    this.step = -1;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
   }
 
+  construct(unit, dX, dY) {
+    if (dX < -1 || dX > 1 || dY < -1 || dY > 1) {
+      return null;
+    }
+
+    if (unit === SPECS.CHURCH) {
+      if (
+        this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE &&
+        this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL
+      ) {
+        this.network.transmit(STATUS_BUILDING);
+        return this.buildUnit(unit, dX, dY);
+      }
+    } else if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
+      this.network.transmit(STATUS_BUILDING);
+      return this.buildUnit(unit, dX, dY);
+    }
+    return null;
+  }
+
+  harvest() {
+    this.network.transmit(STATUS_MINING);
+    return this.mine();
+  }
+
+  shoot(dX, dY) {
+    this.network.transmit(STATUS_ATTACKING);
+    return this.attack(dX, dY);
+  }
+
   turn() {
+    if (this.atlas === null) {
+      this.atlas = new Atlas(this);
+      this.atlas.initialize();
+    }
+    if (this.tactician === null) {
+      this.tactician = new Tactician(this);
+      this.tactician.initialize();
+    }
+    if (this.network === null) {
+      this.network = new Network(this);
+      this.network.initialize();
+    }
+
+    this.sanityCheck(); // this doesn't work for some reason. maybe it's just a replay bug?
+    this.atlas.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.tactician.update(this.getVisibleRobots(), this.getVisibleRobotMap());
+    this.network.update();
+
     if (this.myType === undefined) {
       switch (this.me.unit) {
         case SPECS.PROPHET:
@@ -465,125 +1869,134 @@ class MyRobot extends BCAbstractRobot {
           this.myType = crusader;
           this.speed = CRUSADER_MOVE_SPEED;
           break;
+        case SPECS.CHURCH:
+          return null;
         default:
-          this.log("Unknown unit type" + this.me.unit);
+          this.log("Unknown unit type " + this.me.unit);
       }
     }
-    return this.myType.takeTurn(this);
+    if (this.myType !== undefined) {
+      return this.myType.takeTurn(this);
+    }
+    return null;
   }
 
-  // move the max distance to the target x and y
-  moveToTarget(tX, tY) {
-    if ((this.me.x === tX && this.me.y === tY) || (tX === -1) || (tY === -1)) {
-      return null;
+  sanityCheck() {
+    let insane = false;
+    if (this.location === null) {
+      this.location = { x: this.me.x, y: this.me.y };
     }
 
-    const bots = this.getVisibleRobots();
-    const terrain = [];
-
-    for (let y = 0; y < this.map.length; y++) {
-      const row = [];
-      for (let x = 0; x < this.map[y].length; x++) {
-        row.push(this.map[y][x]);
-      }
-      terrain.push(row);
-    }
-
-    for (let i = 0; i < bots.length; i++) {
-      terrain[bots[i].y][bots[i].x] = false;
-    }
-
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          const distanceFromTileToTarget = ((x - tX) ** 2 + (y - tY) ** 2);
-          const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2);
-          if (distanceFromTileToStart <= this.speed) {
-            row.push(distanceFromTileToTarget);
-          } else {
-            row.push(9999);
-          }
-        }
-      }
-      distances.push(row);
-    }
-
-    let bX = 0;
-    let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
-        }
+    // check if a castle or church moved
+    if (this.me.unit === SPECS.CASTLE || this.me.unit === SPECS.CHURCH) {
+      if (this.location.x !== this.me.x || this.location.y !== this.me.y) {
+        insane = true;
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
-      return null;
+    // check if a unit has negative fuel/karb
+    if (this.me.fuel < 0 || this.me.karbonite < 0) {
+      insane = true;
     }
 
-    const dX = bX - this.me.x;
-    const dY = bY - this.me.y;
-    this.log("Moving to: " + bX + " " + bY + " from: " + this.me.x + " " + this.me.y + " target: " + tX + " " + tY + " tdist: " + distances[tY][tX]);
+    // check if our global fuel/karb pool is negative
+    if (this.fuel < 0 || this.karbonite < 0) {
+      insane = true;
+    }
 
-    // if (bX !== this.me.x && bY !== this.me.y) {
-    return this.move(dX, dY);
-    // }
+    // check if we're off the map
+    if (
+      this.me.x < 0 ||
+      this.me.y < 0 ||
+      this.me.y >= this.map.length ||
+      this.me.x >= this.map[0].length
+    ) {
+      insane = true;
+    }
 
-    //    return null;
+    // check if we're standing in impassable terrain
+    if (!this.map[this.me.y][this.me.x]) {
+      insane = true;
+    }
+
+    if (insane) {
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log(
+        "########################################################################"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "####                      !! BUG DETECTED !!                        ####"
+      );
+      this.log(
+        "#######                                                          #######"
+      );
+      this.log(
+        "#################                                      #################"
+      );
+      this.log(
+        "########################################################################"
+      );
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+      this.log("");
+    }
   }
 
-
-  getClosestResource(terrain) {
-    const distances = [];
-
-    for (let y = 0; y < terrain.length; y++) {
-      const row = [];
-      for (let x = 0; x < terrain[y].length; x++) {
-        if (terrain[y][x] === false || terrain[y][x] === 0) { // second case is for testing because true/false arrays are hard to read
-          row.push(9999);
-        } else {
-          let forbidden = false;
-          for (let i = 0; i < this.forbiddenResourceTiles.length; i++) {
-            if (this.forbiddenResourceTiles[i][0] === x && this.forbiddenResourceTiles[i][1] === y) {
-              forbidden = true;
-            }
-          }
-          if (forbidden) {
-            row.push(9999);
-          } else {
-            const distanceFromTileToStart = ((x - this.me.x) ** 2 + (y - this.me.y) ** 2) ** 0.5;
-            row.push(distanceFromTileToStart);
-          }
-        }
-      }
-      distances.push(row);
+  // also adds in a buffer for churches in case pilgrims want to build them
+  haveResourcesToBuild(unit) {
+    if (
+      this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
+      this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
+    ) {
+      return true;
     }
+    return false;
+  }
 
-    let bX = 0;
-    let bY = 0;
-    for (let y = 0; y < distances.length; y++) {
-      for (let x = 0; x < distances[y].length; x++) {
-        if (distances[y][x] < distances[bY][bX]) {
-          bX = x;
-          bY = y;
+  buildOnRandomEmptyTile(unit) {
+    const validTiles = [];
+    const botMap = this.getVisibleRobotMap();
+    for (let dY = -1; dY <= 1; dY++) {
+      for (let dX = -1; dX <= 1; dX++) {
+        const x = this.me.x + dX;
+        const y = this.me.y + dY;
+        if (this.atlas._coordIsValid(x, y)) {
+          if (
+            this.map[y][x] &&
+            botMap[y][x] === 0 &&
+            !this.fuel_map[y][x] &&
+            !this.karbonite_map[y][x]
+          ) {
+            validTiles.push({ dX, dY });
+          }
         }
       }
     }
 
-    // no legal movements
-    if (distances[bY][bX] === 9999) {
-      return [-1, -1];
+    const tile = validTiles[Math.floor(Math.random() * validTiles.length)];
+    if (tile !== undefined) {
+      return this.construct(unit, tile.dX, tile.dY);
     }
-    return [bX, bY];
+    return null;
   }
 }
-
 var robot = new MyRobot();

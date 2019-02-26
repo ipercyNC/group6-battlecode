@@ -1,13 +1,13 @@
 import { BCAbstractRobot, SPECS } from "battlecode";
 import * as Constants from "./constants.js";
 
-const prophet = {};
+const crusader = {};
 
 const tileIsPorced = (x, y, self) => {
   const botMap = self.getVisibleRobotMap();
   if (botMap[y][x] > 0) {
     const bot = self.getRobot(botMap[y][x]).unit;
-    if (bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+    if (bot === SPECS.CRUSADER || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
       return true;
     }
   }
@@ -26,8 +26,12 @@ const getPorcDestination = (self) => {
   const porcMap = [];
   for (let y = 0; y < botMap.length; y++) {
     const row = [];
+    let offset = 0;
+    if (y % 2 === 0) {
+      offset = 1;
+    }
     for (let x = 0; x < botMap[y].length; x++) {
-      if (x % (GRID_SPACE + 1) === 0 && y % (GRID_SPACE + 1) === 0) {
+      if ((x - offset) % (GRID_SPACE + 1) === 0) {
         if ((tileIsPorced(x, y, self)) || // can't build porc if there's already porc there
           (self.karbonite_map[y][x]) || // don't build on karb
           (self.fuel_map[y][x]) || // or fuel
@@ -59,7 +63,7 @@ const getPorcDestination = (self) => {
   return [bX, bY];
 };
 
-prophet.takeTurn = (self) => {
+crusader.takeTurn = (self) => {
   const bots = self.getVisibleRobots();
 
   if (self.infant) {
@@ -75,10 +79,20 @@ prophet.takeTurn = (self) => {
     self.porcDestination = getPorcDestination(self);
   }
 
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].team !== self.me.team) {
-      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.PROPHET].ATTACK_RADIUS) {
-        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
+  const botMap = self.getVisibleRobotMap();
+  const minY = self.me.y - SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const maxY = self.me.y + SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const minX = self.me.x - SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+  const maxX = self.me.x + SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS;
+
+
+  for (let y = minY; y < maxY; y++) {
+    for (let x = minX; x < maxX; x++) {
+      const bot = self.getRobot(botMap[y][x]);
+      if (bot.team !== self.me.team) {
+        if (((self.me.x - bot.x) ** 2 + (self.me.y - bot.y) ** 2) <= SPECS.UNITS[SPECS.CRUSADER].ATTACK_RADIUS) {
+          return self.attack(bot.x - self.me.x, bot.y - self.me.y);
+        }
       }
     }
   }
@@ -87,7 +101,6 @@ prophet.takeTurn = (self) => {
     if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
       // if we're at our dest then stop moving
       // if someone got there first then pick a new dest
-      const botMap = self.getVisibleRobotMap();
       if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
         if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
           self.inTransit = false;
@@ -104,4 +117,4 @@ prophet.takeTurn = (self) => {
 
   return null;
 };
-export default prophet;
+export default crusader;
