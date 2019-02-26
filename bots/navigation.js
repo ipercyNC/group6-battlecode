@@ -51,12 +51,22 @@ navigation.goUp = [
   { x: 1, y: 1 },
   { x: -1, y: 1 },
   { x: -1, y: 0 },
+    { x: 1, y: 0 },
+  { x: 0, y: -1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+
 ];
 navigation.goDown = [
   { x: 0, y: -1 },
   { x: 1, y: -1 },
   { x: -1, y: -1 },
   { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+
 ];
 // get new dir
 navigation.applyDir = (loc, dir) => {
@@ -64,22 +74,18 @@ navigation.applyDir = (loc, dir) => {
 };
 // check if the robot appoaches borders.
 navigation.getToBorder = (robot) => {
-  const robotLoc = {x: robot.x, y: robot.y};
   const attackRadius = SPECS.UNITS[robot.unit].ATTACK_RADIUS[1];
-  if (robotLoc.x - attackRadius) < 0 || (robotLoc.x + attackRadius) > 64 {
+  if ((robot.y - attackRadius) < 0) {
+    robot.direction = "Down";
+    return true;
+  }
+  if ((robot.y + attackRadius) > 64) {
+    robot.direction = "Up";
     return true;
   }
   return false;
 }
-// Change direction of current robot
-navigation.changeDirection = (robot) => {
-  if robot.direction === "Up" {
-    robot.direction = "Down";
-    return navigation.goDown;
-  }
-  robot.direction = "Up";
-  return navigation.goUp;
-}
+
 // move our robot closer to target with in steps, return x_step and y_step
 navigation.moveToTarget = (ourRobot, target, fullMap, robotMap) => {
   const ourRobot_loc = { x: ourRobot.x, y: ourRobot.y };

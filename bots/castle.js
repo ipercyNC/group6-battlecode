@@ -1,5 +1,5 @@
-import { SPECS } from "battlecode";
-
+import {BCAbstractRobot, SPECS } from "battlecode";
+import navigation from './navigation.js';
 const haveResourcesToBuild = (unit, self) => {
   if (self.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE && self.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL) {
     return true;
@@ -36,57 +36,106 @@ const castle = {};
 
 castle.takeTurn = (self) => {
   self.step++;
-
-  // get all robots within range
-  const enemiesInRange = self.getVisibleRobots().filter((robot) => {
-    const dist = (self.me.x - robot.x) ** 2 + (self.me.y - robot.y) ** 2;
-    const minRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0];
-    const maxRange = SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1];
-    if (self.me.team !== robot.team && dist >= minRange && dist <= maxRange) {
-      return true;
-    }
-    return false;
+  const visible = self.getVisibleRobots();
+  //get all robots that sent message
+  const messagingRobots = visible.filter(robot => {
+    return robot.castle_talk;
   });
 
-  // attack enemies in order of prophet > preacher > crusader > pilgrim
-  if (enemiesInRange.length > 0 && self.fuel >= 10) {
-    // break the list of attackable robots down by unit type
-    const enemyRobots = {
-      [SPECS.PROPHET]: [],
-      [SPECS.PREACHER]: [],
-      [SPECS.CRUSADER]: [],
-      [SPECS.PILGRIM]: [],
-    };
-
-    // split the list up by unit to make it easy to prioritize targets
-    for (let i = 0; i < enemiesInRange.length; i++) {
-      enemyRobots[enemiesInRange[i].unit].push(enemiesInRange[i]);
+  // get enemy castle location
+  for (let i = 0; i < messagingRobots.length; i++) {
+    const robot = messagingRobots[i];
+    if (!self.pendingRecievedMessages[robot.id]) {
+      self.pendingRecievedMessages[robot.id] = robot.castle_talk;
+    } else {
+      if (!self.enemyCastles.includes({
+        x: self.pendingRecievedMessages[robot.id],
+        y: robot.castle_talk,
+      })) {
+        self.enemyCastles.push({
+          x: self.pendingRecievedMessages[robot.id],
+          y: robot.castle_talk,
+        });
+      }
+      self.pendingRecievedMessages[robot.id] = null;
     }
+  }
 
-    // get the first enemy robot and attack it
-    for (const key in enemyRobots) {
-      if (enemyRobots[key].length > 0) {
-        const dX = enemyRobots[key][0].x - self.me.x;
-        const dY = enemyRobots[key][0].y - self.me.y;
-        return self.attack(dX, dY);
+  // get all robots within range
+  var getBuildDir = function(center) {
+    var options = navigation.buildable.filter((d) => {
+      return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap())
+    })
+    return options[0];
+  }
+
+  if (self.pilgrimsBuilt < 3 && self.karbonite >= 10) {
+    var d = getBuildDir(self.me);
+    if (!(d === undefined)){
+      self.pilgrimsBuilt++;
+      return self.buildUnit(SPECS.PILGRIM, d.x, d.y);
+    }
+  }
+
+
+  var attackable = visible.filter((r) => {
+    if (! self.isVisible(r)){
+      return false;
+    }
+    const dist = (r.x-self.me.x)**2 + (r.y-self.me.y)**2;
+    if (r.team !== self.me.team
+      && SPECS.UNITS[self.me.unit].ATTACK_RADIUS[0] <= dist
+      && dist <= SPECS.UNITS[self.me.unit].ATTACK_RADIUS[1] ){
+        return true;
+      }
+      return false;
+    });
+
+
+    if (self.step % 50 || self.step % 51) {
+      let enemyCastle = null;
+      for (let i = 0; i < self.enemyCastles.length; i++) {
+        const x = self.enemyCastles[i].x;
+        const y = self.enemyCastles[i].y;
+        if (x >= 0 && y >=0) {
+          enemyCastle = self.enemyCastles[i];
+          break;
+        } else {
+          // remove invalid castle
+          self.enemyCastles.splice(i, 1);
+        }
+      }
+
+      if (enemyCastle) {
+        self.log('KNOWN ENEMY CASTLES');
+        if (!self.pendingMessage) {
+          self.log("Broadcasting enemy castle location");
+          self.pendingMessage = enemyCastle.y;
+          self.signal(enemyCastle.x, self.signal_radius);
+        } else {
+          self.signal(enemyCastle.y, self.signal_radius);
+          self.pendingMessage = null;
+        }
       }
     }
-  }
 
-  // build a pilgrim for the first two turns
-  if (self.step <= 2) {
-    return buildOnRandomEmptyTile(SPECS.PILGRIM, self);
-  }
 
-  const unit = self.buildCycle[self.buildIndex];
-  if (haveResourcesToBuild(unit, self) && Math.random() < 0.33) { // random chance is so one castle doesn't hog all the resources
-    self.buildIndex++;
-    if (self.buildIndex >= self.buildCycle.length) {
-      self.buildIndex = 0;
+    if (attackable.length>0){
+      // attack first robot
+      var r = attackable[0];
+      self.log('' +r);
+      self.log('attacking! ' + r + ' at loc ' + (r.x - self.me.x, r.y - self.me.y));
+      return self.attack(r.x - self.me.x, r.y - self.me.y);
     }
-    return buildOnRandomEmptyTile(unit, self);
-  }
-};
+
+    if (self.karbonite > 30 && self.fuel > 150) {
+      let unit = SPECS.PROPHET;
+      var d = getBuildDir(self.me);
+      if (!(d === undefined)){
+        return self.buildUnit(unit, d.x, d.y);
+      }
+    }
+  };
 
 
-export default castle;
+  export default castle;
