@@ -37,22 +37,37 @@ const makeMap = () => {
 	  [1,1,1,1,1]
   ];
 };
+const makeRobotMap = () => {
+  return [
+	  [1,0,0,0,0],
+	  [0,0,0,0,0],
+	  [0,0,0,0,0],
+	  [0,0,0,0,0],
+	  [0,0,0,0,0]
+  ];
+};
+function setupBasics(atlas){
+  atlas.map = makeMap();
+  atlas.karbMap = makeKarbMap(); 
+  atlas.fuelMap = makeFuelMap();
+  atlas.initializeResources();
+}
 describe("class Atlas", () => {
-  /*describe("function update(robots, robotMap)", () => {
+  describe("function update(robots, robotMap)", () => {
     it("should save robots and robotMap as object fields", () => {
       const atlas = makeAtlas();
 
       const robotsBefore = atlas.robots;
       const robotMapBefore = atlas.robotMapBefore;
-
-      atlas.update(robotsBefore, robotMapBefore);
-
+      atlas.owner = {'me':{'x':0}};
+      atlas.update(54, 32);
+      
       expect(robotsBefore).not.toEqual(54);
       expect(robotMapBefore).not.toEqual(32);
       expect(atlas.robots).toEqual(54);
       expect(atlas.robotMap).toEqual(32);
     });
-  });*/
+  });
   describe("function getNumResources()",() =>{
     it("should correctly return number of resources", () => {
       const atlas = makeAtlas();
@@ -88,4 +103,52 @@ describe("class Atlas", () => {
 
     });
   });
+  describe("function updateResourceMap()",() => {
+    it("should update the resource map based on robot locations", () => {
+      const atlas = makeAtlas();
+      atlas.owner= {'me': {'x':0}};
+      atlas.map = makeMap();
+      atlas.karbMap = makeKarbMap();
+      atlas.fuelMap = makeFuelMap();
+      atlas.initializeResources();
+      atlas.robotMap = makeRobotMap();
+      atlas.updateResourceMap();
+      expect(atlas.resourceTiles[0].state).toEqual(Constants.RESOURCE_TILE_BUSY);
+    });
+  });
+  describe("functions to tileIsFuel and tileIsKarbonite",() => {
+    it("testing tileIsFuel()", () => {
+      const atlas = makeAtlas();
+      atlas.map = makeMap();
+      atlas.karbMap = makeKarbMap();
+      atlas.fuelMap = makeFuelMap();
+      atlas.initializeResources();
+      expect(atlas.resourceMap[0][0]).toEqual(Constants.FUEL);
+    });
+    it("testing tileIsKarbonite()", () => {
+     const atlas = makeAtlas();
+     atlas.map = makeMap();
+     atlas.karbMap = makeKarbMap();
+     atlas.fuelMap = makeFuelMap();
+     atlas.initializeResources();
+     expect(atlas.resourceMap[2][3]).toEqual(Constants.KARBONITE); 
+    });
+  }); 
+  describe("function tileIsBlocked()", () => {
+    it("testing when tile is blocked by other robot", () => {
+      const atlas = makeAtlas(); 
+      setupBasics(atlas);
+      expect(atlas.resourceMap[2][3]).toEqual(Constants.KARBONITE);
+    });
+    it("testing when blocked by me", () => {
+       
+    });
+    it("testing when not blocked", () => {
+      
+    });
+
+  });
+
+
+
 });
