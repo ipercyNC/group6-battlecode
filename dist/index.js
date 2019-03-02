@@ -279,106 +279,26 @@ const COMBAT_PHASE_SEARCH_AND_DESTROY = COMBAT_PHASE_IDLE + 1;
 
 const prophet = {};
 
-const tileIsPorced = (x, y, self) => {
-  const botMap = self.getVisibleRobotMap();
-  if (botMap[y][x] > 0) {
-    const bot = self.getRobot(botMap[y][x]).unit;
-    if (bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const getPorcDestination = (self) => {
-  const cX = self.me.x; // center x
-  const cY = self.me.y; // center y
-
-  const GRID_SPACE = 1;
-
-  // create a map of distances from our castle to available porc tiles
-  const botMap = self.getVisibleRobotMap();
-  const porcMap = [];
-  for (let y = 0; y < botMap.length; y++) {
-    const row = [];
-    for (let x = 0; x < botMap[y].length; x++) {
-      if (x % (GRID_SPACE + 1) === 0 && y % (GRID_SPACE + 1) === 0) {
-        if ((tileIsPorced(x, y, self)) || // can't build porc if there's already porc there
-          (self.karbonite_map[y][x]) || // don't build on karb
-          (self.fuel_map[y][x]) || // or fuel
-          (!self.map[y][x]) // can't build on a wall
-        ) {
-          row.push(99999);
-        } else {
-          row.push((x - cX) ** 2 + (y - cY) ** 2);
-        }
-      } else {
-        row.push(99999);
-      }
-    }
-    porcMap.push(row);
-  }
-
-  // pick the closest open tile
-  let bX = 0;
-  let bY = 0;
-  for (let y = 0; y < porcMap.length; y++) {
-    for (let x = 0; x < porcMap[y].length; x++) {
-      if (porcMap[y][x] < porcMap[bY][bX]) {
-        bX = x;
-        bY = y;
-      }
-    }
-  }
-
-  return [bX, bY];
-};
-
 prophet.takeTurn = (self) => {
   const bots = self.getVisibleRobots();
 
   if (self.infant) {
     self.infant = false;
-
-    // save the first castle we see as our porc center to align the grid
-    for (let i = 0; i < bots.length; i++) {
-      if (bots[i].unit === SPECS.CASTLE) {
-        self.castle = [bots[i].x, bots[i].y];
-      }
-    }
-
-    self.porcDestination = getPorcDestination(self);
   }
 
-  for (let i = 0; i < bots.length; i++) {
-    if (bots[i].team !== self.me.team) {
-      if (((self.me.x - bots[i].x) ** 2 + (self.me.y - bots[i].y) ** 2) <= SPECS.UNITS[SPECS.PROPHET].ATTACK_RADIUS) {
-        return self.attack(bots[i].x - self.me.x, bots[i].y - self.me.y);
-      }
-    }
+  // find out if there's an enemy to shoot
+  // if there is, either attack them or move closer to them
+  const enemy = self.tactician.getNearbyEnemy();
+  if (enemy !== null) {
+    return self.tactician.attackEnemy(enemy);
   }
 
-  if (self.inTransit) {
-    if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-      // if we're at our dest then stop moving
-      // if someone got there first then pick a new dest
-      const botMap = self.getVisibleRobotMap();
-      if (botMap[self.porcDestination[1]][self.porcDestination[0]] > 0) {
-        if (self.me.x === self.porcDestination[0] && self.me.y === self.porcDestination[1]) {
-          self.inTransit = false;
-        } else if (tileIsPorced(self.porcDestination[0], self.porcDestination[1], self)) {
-          self.porcDestination = getPorcDestination(self);
-        }
-      }
-
-      if (self.porcDestination[0] !== -1 && self.porcDestination[1] !== -1) {
-        return self.sanitizeRet(self.moveToTarget(self.porcDestination[0], self.porcDestination[1]));
-      }
-    }
+  if (self.atlas.moving) {
+    return self.atlas.continueMovement();
   }
 
-  return null;
+  self.atlas.moveToPorcGrid();
+  return self.atlas.continueMovement();
 };
 
 var SPECS$1 = {
@@ -497,30 +417,24 @@ var SPECS$1 = {
 const castle = {};
 
 castle.takeTurn = (self) => {
-  self.step++;
+  if (self.infant) {
+    self.infant = false;
 
-
-  if (self.step % 50 === 0) {
-    const mirroredHorizontally = self.atlas.mapIsHorizontallyMirrored();
-
-    // select a target by mirroring our location over
-    const target = { x: self.me.x, y: self.me.y };
-
-    if (mirroredHorizontally) {
-      self.log("Modified x broadcast");
-      if (self.me.x > self.map.length / 2) {
-        target.x = Math.round(self.me.x - self.map.length / 2);
-      } else {
-        target.x = Math.round(self.map.length - self.me.x);
+    if (self.atlas.mapIsHorizontallyMirrored()) {
+      if ((self.me.x < self.map.length * 0.5 && self.me.x > self.map.length * 0.25) || (self.me.x > self.map.length * 0.5 && self.me.x < self.map.length * 0.75)) {
+        self.frontier = true;
       }
-    } else if (!mirroredHorizontally) {
-      self.log("Modified y broadcast");
-      if (self.me.y > self.map.length / 2) {
-        target.y = Math.round(self.me.y - self.map.length / 2);
-      } else {
-        target.y = Math.round(self.map.length - self.me.y);
-      }
+    } else if ((self.me.y < self.map.length * 0.5 && self.me.y > self.map.length * 0.25) || (self.me.y > self.map.length * 0.5 && self.me.y < self.map.length * 0.75)) {
+      self.frontier = true;
     }
+  }
+
+
+  // signal nearby crusaders to attack
+  /*
+  if (self.me.turn % 50 === 0) {
+    // select a target by mirroring our location over
+    const target = { x: self.enemyCastles[0].x, y: self.enemyCastles[0].y };
 
     // calculate our signal
     const signal = target.x * 256 + target.y;
@@ -532,36 +446,79 @@ castle.takeTurn = (self) => {
       self.signal(signal, Math.ceil(10 ** 2));
     }
   }
+*/
+
+  // can only transmit 1 coord at a time so self takes a few turns
+  if (self.me.turn <= 2) {
+    self.network.getCastles(self.me.turn, self.castles);
+    return null;
+  }
+
+  // gotten a full set of castle coordinates
+  if (self.me.turn === 3) {
+    // calculate which turn we take
+    self.rank = 0;
+    for (let i = 0; i < self.castles.length; i++) {
+      if (self.atlas.mapIsHorizontallyMirrored() && self.castles[i].x > self.me.x) {
+        self.rank++;
+      } else if (!self.atlas.mapIsHorizontallyMirrored() && self.castles[i].y > self.me.y) {
+        self.rank++;
+      }
+    }
+    self.nCastles = self.castles.length;
+    if (self.nCastles === 0) {
+      self.nCastles = 1;
+    }
+
+    // calculate enemy castle locations by mirroring our castle locations
+    for (let i = 0; i < self.castles.length; i++) {
+      if (self.atlas.mapIsHorizontallyMirrored()) {
+        self.enemyCastles.push({ x: self.map.length - self.castles[i].x, y: self.castles[i].y });
+      } else {
+        self.enemyCastles.push({ x: self.castles[i].x, y: self.map.length - self.castles[i].y });
+      }
+    }
+  }
 
   // take turns with fellow castles so nobody monopolizes resources
-  if (self.rank === null) {
-    self.rank = self.network.syncCastles();
+  if (self.me.turn % (self.nCastles + self.network.getNumChurches()) !== self.rank && self.nCastles > 1) {
     return null;
   }
 
-  if (self.step % self.network.getNumCastles() !== self.rank) {
-    return null;
-  }
 
   const enemy = self.tactician.getNearbyEnemy();
-  if (enemy !== null && self.tactician.enemyInRange(enemy)) {
-    return self.tactician.attackEnemy(enemy);
+  if (enemy !== null) {
+    if (self.tactician.enemyInRange(enemy)) {
+      return self.tactician.attackEnemy(enemy);
+    }
+    return self.buildOnRandomEmptyTile(SPECS$1.CRUSADER);
   }
 
   // priority build pilgrims until there's enough for all resource tiles on the map
-  // note that this is halved to account for resources in enemy terrain
+  // note that self is halved to account for resources in enemy terrain
   // if pilgrims are killed more will be spawned because of the heartbeat
-  if (self.network.getNumPilgrims() < Math.floor(self.atlas.getNumResources() / 2)) {
+  if (self.tactician.getNumVisiblePilgrims() < self.atlas.getNumNearbyResources()) {
     if (self.haveResourcesToBuild(SPECS$1.PILGRIM)) {
       return self.buildOnRandomEmptyTile(SPECS$1.PILGRIM);
     }
   }
 
+  if (self.me.turn % 25 === 0) {
+    return self.buildOnRandomEmptyTile(SPECS$1.PILGRIM);
+  }
 
-  // build crusaders if we can
-  if (self.haveResourcesToBuild(SPECS$1.CRUSADER)) { // random chance is so one castle doesn't hog all the resources
+  // build prophets for defense
+  if (self.me.turn < 700 && self.haveResourcesToBuild(SPECS$1.PROPHET)) {
+    return self.buildOnRandomEmptyTile(SPECS$1.PROPHET);
+  }
+
+  // or crusaders for health victory in the late game
+  if (self.me.turn > 7 && self.haveResourcesToBuild(SPECS$1.CRUSADER)) {
     return self.buildOnRandomEmptyTile(SPECS$1.CRUSADER);
   }
+
+
+  return null;
 };
 
 const pilgrim = {};
@@ -577,6 +534,27 @@ pilgrim.takeTurn = (self) => {
 
   self.atlas.saveParentBase();
   self.atlas.updateResourceMap();
+
+  // check if we should build a base
+  if (self.atlas.tileIsKarbonite(self.me.x, self.me.y) || self.atlas.tileIsFuel(self.me.x, self.me.y)) {
+    if (self.buildBaseLocation === null && self.atlas.getBaseWithinRange(6) === null) {
+      self.buildBaseLocation = self.atlas.getOptimalBaseLocation(self.me.x, self.me.y);
+    }
+  }
+
+  if (self.buildBaseLocation !== null) {
+    if (!self.moving) {
+      self.atlas.calculatePathAdjacentToTarget(self.buildBaseLocation.x, self.buildBaseLocation.y);
+    }
+
+    if (self.moving) {
+      return self.atlas.continueMovement();
+    }
+    const dX = self.buildBaseLocation.x - self.me.x;
+    const dY = self.buildBaseLocation.y - self.me.y;
+    self.buildBaseLocation = null;
+    return self.construct(SPECS.CHURCH, dX, dY);
+  }
 
   // mine resource if carrying space and on a relevant tile
   if (self.atlas.tileIsKarbonite(self.me.x, self.me.y) && self.me.karbonite < PILGRIM_KARBONITE_CAPACITY) {
@@ -629,26 +607,6 @@ pilgrim.takeTurn = (self) => {
     return self.give(dX, dY, self.me.karbonite, self.me.fuel);
   }
 
-
-  // before going home see if we should build a base for this resource tile
-  if (self.buildBaseLocation === null && self.atlas.getBaseWithinRange(6) === null) {
-    self.buildBaseLocation = self.atlas.getOptimalBaseLocation(self.me.x, self.me.y);
-  }
-
-  if (self.buildBaseLocation !== null) {
-    if (!self.moving) {
-      self.atlas.calculatePathAdjacentToTarget(self.buildBaseLocation.x, self.buildBaseLocation.y);
-    }
-
-    if (self.moving) {
-      return self.atlas.continueMovement();
-    }
-    const dX = self.buildBaseLocation.x - self.me.x;
-    const dY = self.buildBaseLocation.y - self.me.y;
-    self.buildBaseLocation = null;
-    return self.construct(SPECS.CHURCH, dX, dY);
-  }
-
   // go back home
   // self.log("Going home");
   self.atlas.calculatePathAdjacentToTarget(self.atlas.base.x, self.atlas.base.y);
@@ -659,8 +617,6 @@ const crusader = {};
 
 
 crusader.takeTurn = (self) => {
-  const bots = self.getVisibleRobots();
-
   if (self.infant) {
     self.infant = false;
   }
@@ -672,31 +628,78 @@ crusader.takeTurn = (self) => {
     return self.tactician.attackEnemy(enemy);
   }
 
-  if (self.phase === COMBAT_PHASE_SEARCH_AND_DESTROY) {
-    if (self.atlas.moving) {
-      return self.atlas.continueMovement();
-    }
-
-    const tX = Math.round(Math.random() * (self.map.length));
-    const tY = Math.round(Math.random() * (self.map.length));
-    self.atlas.calculatePathAdjacentToTarget(tX, tY);
-  } else {
-    // check if we've been signalled to switch to s&d mode
-    for (let i = 0; i < bots.length; i++) {
-      if (bots[i].team === self.me.team) {
-        if (bots[i].signal > 0) {
-          self.phase = COMBAT_PHASE_SEARCH_AND_DESTROY;
-          self.atlas.calculatePathAdjacentToTarget(Math.ceil(bots[i].signal / 256), bots[i].signal % 256);
-        }
-      }
-    }
-  }
-
   if (self.atlas.moving) {
     return self.atlas.continueMovement();
   }
 
-  return self.atlas.moveToPorcGrid();
+  self.atlas.moveToStashGrid();
+  return self.atlas.continueMovement();
+};
+
+const church = {};
+
+church.takeTurn = (self) => {
+  self.step++;
+
+  if (self.infant) {
+    self.infant = false;
+
+    if (self.atlas.mapIsHorizontallyMirrored()) {
+      if ((self.me.x < self.map.length * 0.5 && self.me.x > self.map.length * 0.25) || (self.me.x > self.map.length * 0.5 && self.me.x < self.map.length * 0.75)) {
+        self.frontier = true;
+      }
+    } else if ((self.me.y < self.map.length * 0.5 && self.me.y > self.map.length * 0.25) || (self.me.y > self.map.length * 0.5 && self.me.y < self.map.length * 0.75)) {
+      self.frontier = true;
+    }
+  }
+  /*
+    // signal nearby crusaders to attack
+    if (self.step % 50 === 0) {
+      // select a target by mirroring our location over
+      let target = null;
+      if (self.atlas.mapIsHorizontallyMirrored()) {
+        target = { x: self.map.length - self.me.x, y: self.me.y };
+      } else {
+        target = { x: self.me.x, y: self.map.length - self.me.y };
+      }
+
+      // calculate our signal
+      const signal = target.x * 256 + target.y;
+
+      if (self.fuel > 10 ** 2) {
+        // signal to everything on the map to target that enemy
+        self.log("BROADCAST " + signal + " " + target.x + " " + target.y);
+        self.broadcasted = true;
+        self.signal(signal, Math.ceil(10 ** 2));
+      }
+    }
+  */
+
+  if (self.me.turn === 1) {
+    return self.buildOnRandomEmptyTile(SPECS$1.PROPHET);
+  }
+
+  // priority build pilgrims until there's enough for all resource tiles on the map
+  // note that this is halved to account for resources in enemy terrain
+  // if pilgrims are killed more will be spawned because of the heartbeat
+  if (self.tactician.getNumVisiblePilgrims() < Math.floor(self.atlas.getNumNearbyResources())) {
+    if (self.haveResourcesToBuild(SPECS$1.PILGRIM)) {
+      return self.buildOnRandomEmptyTile(SPECS$1.PILGRIM);
+    }
+  }
+
+  // build prophets for defense
+  if (self.me.turn < 700 && self.haveResourcesToBuild(SPECS$1.PROPHET) && self.frontier) {
+    return self.buildOnRandomEmptyTile(SPECS$1.PROPHET);
+  }
+
+  // or crusaders for health victory in the late game
+  if (self.me.turn > 7 && self.haveResourcesToBuild(SPECS$1.CRUSADER) && self.frontier) {
+    return self.buildOnRandomEmptyTile(SPECS$1.CRUSADER);
+  }
+
+  return null;
+
 };
 
 function BinaryHeap(scoreFunction) {
@@ -836,6 +839,7 @@ class Atlas {
 
     this.stationary = false;
     this.porcDestination = null;
+    this.stashDestination = null;
     this.pos = null;
 
     this.nResources = -1;
@@ -928,6 +932,21 @@ class Atlas {
       }
     }
     return this.nResources;
+  }
+
+  getNumNearbyResources() {
+    let nResources = 0;
+    const MAX_RANGE = 5;
+    for (let y = this.pos.y - MAX_RANGE; y < this.pos.y + MAX_RANGE; y++) {
+      for (let x = this.pos.x - MAX_RANGE; x < this.pos.x + MAX_RANGE; x++) {
+        if (this._coordIsValid(x, y)) {
+          if (this.karbMap[y][x] || this.fuelMap[y][x]) {
+            nResources++;
+          }
+        }
+      }
+    }
+    return nResources;
   }
 
   getBaseWithinRange(range) {
@@ -1465,8 +1484,22 @@ class Atlas {
             (!this.map[y][x]) // can't build on a wall
           ) {
             row.push(99999);
-          } else {
-            row.push((x - cX) ** 2 + (y - cY) ** 2);
+          } else if (this.mapIsHorizontallyMirrored()) {
+            if (x < this.map.length * 0.25) {
+              row.push(99999);
+            } else if (x > this.map.length * 0.75) {
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          } else if (!this.mapIsHorizontallyMirrored()) {
+            if (y < this.map.length * 0.25) {
+              row.push(99999);
+            } else if (y > this.map.length * 0.75) {
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
           }
         } else {
           row.push(99999);
@@ -1490,6 +1523,63 @@ class Atlas {
     return [bX, bY];
   }
 
+  getStashDestination() {
+    const cX = this.pos.x; // center x
+    const cY = this.pos.y; // center y
+
+    const GRID_SPACE = 1;
+
+    // create a map of distances from our castle to available porc tiles
+    const botMap = this.robotMap;
+    const porcMap = [];
+    for (let y = 0; y < botMap.length; y++) {
+      const row = [];
+      let offset = 0;
+      if (y % 2 === 0) {
+        offset = 1;
+      }
+      for (let x = 0; x < botMap[y].length; x++) {
+        if ((x - offset) % (GRID_SPACE + 1) === 0) {
+          if ((this.tileIsPorced(x, y)) || // can't build porc if there's already porc there
+            (this.karbMap[y][x]) || // don't build on karb
+            (this.fuelMap[y][x]) || // or fuel
+            (!this.map[y][x]) // can't build on a wall
+          ) {
+            row.push(99999);
+          } else if (this.mapIsHorizontallyMirrored()) {
+            if (x > this.map.length * 0.25 && x < this.map.length * 0.75) { // stash only on the far left or far right x axis
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          } else if (!this.mapIsHorizontallyMirrored()) {
+            if (y > this.map.length * 0.25 && y < this.map.length * 0.75) { // stash only on the far top or far bottom y axis
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          }
+        } else {
+          row.push(99999);
+        }
+      }
+      porcMap.push(row);
+    }
+
+    // pick the closest open tile
+    let bX = 0;
+    let bY = 0;
+    for (let y = 0; y < porcMap.length; y++) {
+      for (let x = 0; x < porcMap[y].length; x++) {
+        if (porcMap[y][x] < porcMap[bY][bX]) {
+          bX = x;
+          bY = y;
+        }
+      }
+    }
+
+    return [bX, bY];
+  }
 
   tileIsPorced(x, y) {
     // don't porc next to bases cuz they'll get walled in
@@ -1501,7 +1591,7 @@ class Atlas {
     const botMap = this.robotMap;
     if (botMap[y][x] > 0) {
       const bot = this.getRobot(botMap[y][x]).unit;
-      if (bot === SPECS$1.CRUSADER || bot === SPECS$1.CASTLE || bot === SPECS$1.CHURCH) {
+      if (bot === SPECS$1.CRUSADER || bot === SPECS$1.PROPHET || bot === SPECS$1.CASTLE || bot === SPECS$1.CHURCH) {
         return true;
       }
     }
@@ -1532,6 +1622,35 @@ class Atlas {
         }
         if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
           this.calculatePathToTarget(this.porcDestination[0], this.porcDestination[1]);
+          return this.continueMovement();
+        }
+      }
+    }
+    return null;
+  }
+
+  moveToStashGrid() {
+    if (!this.stationary) {
+      if (this.stashDestination === null) {
+        this.stashDestination = this.getStashDestination();
+      }
+      if (this.stashDestination[0] !== -1 && this.stashDestination[1] !== -1) {
+        // if we're at our dest then stop moving
+        // if someone got there first then pick a new dest
+        if (this.robotMap[this.stashDestination[1]][this.stashDestination[0]] > 0) {
+          if (this.pos.x === this.stashDestination[0] && this.pos.y === this.stashDestination[1]) {
+            this.stationary = true;
+          } else if (this.tileIsPorced(this.stashDestination[0], this.stashDestination[1])) {
+            this.stashDestination = this.getStashDestination();
+            this.moving = false;
+          }
+        }
+
+        if (this.moving) {
+          return this.continueMovement();
+        }
+        if (this.stashDestination[0] !== -1 && this.stashDestination[1] !== -1) {
+          this.calculatePathToTarget(this.stashDestination[0], this.stashDestination[1]);
           return this.continueMovement();
         }
       }
@@ -1579,6 +1698,24 @@ class Tactician {
   activate(target) {
     this.stage = COMBAT_PHASE_SEARCH_AND_DESTROY;
     this.target = target;
+  }
+
+  getNumVisiblePilgrims() {
+    return this.robots.filter((robot) => {
+      if (this.team === robot.team && robot.unit === SPECS$1.PILGRIM && robot.x !== undefined) {
+        return true;
+      }
+      return false;
+    }).length;
+  }
+
+  getNumVisibleProphets() {
+    return this.robots.filter((robot) => {
+      if (this.team === robot.team && robot.unit === SPECS$1.PROPHET) {
+        return true;
+      }
+      return false;
+    }).length;
   }
 
   getNearbyEnemies() {
@@ -1688,6 +1825,23 @@ class Network {
     return null;
   }
 
+  getCastles(step, castles) {
+    const transmitX = Math.floor(this.owner.me.x / (this.owner.map.length / 4));
+    const transmitY = Math.floor(this.owner.me.y / (this.owner.map.length / 4));
+    this.transmit(transmitX * 4 + transmitY);
+
+    let index = 0;
+    for (let i = 0; i < this.units[SPECS$1.CASTLE].length; i++) {
+      const data = this.units[SPECS$1.CASTLE][i];
+      const x = Math.round(Math.floor(data / 4) * (this.owner.map.length / 4) + (this.owner.map.length / 8));
+      const y = Math.round(data % 4 * (this.owner.map.length / 4) + (this.owner.map.length / 8));
+
+      if (castles[index] === undefined) {
+        castles.push({ x, y });
+        index++;
+      }
+    }
+  }
 
   countRobots() {
     this.units = [];
@@ -1778,6 +1932,9 @@ class MyRobot extends BCAbstractRobot {
     this.nResources = 0;
     this.turnsToSkip = 0;
     this.rank = null;
+    this.enemyCastles = [];
+    this.castles = [];
+    this.nCastles = 0;
 
     this.robots = [];
     this.broadcasted = false;
@@ -1793,10 +1950,10 @@ class MyRobot extends BCAbstractRobot {
     ];
 
     this.pendingRecievedMessages = {};
-    this.enemyCastles = [];
     this.myType = undefined;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
+    this.frontier = false;
   }
 
   construct(unit, dX, dY) {
@@ -1809,26 +1966,34 @@ class MyRobot extends BCAbstractRobot {
         this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE &&
         this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL
       ) {
-        this.network.transmit(STATUS_BUILDING);
+        if (this.me.unit !== SPECS.CASTLE) {
+          this.network.transmit(STATUS_BUILDING);
+        }
         return this.buildUnit(unit, dX, dY);
       }
     } else if (
       this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
       this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
     ) {
-      this.network.transmit(STATUS_BUILDING);
+      if (this.me.unit !== SPECS.CASTLE) {
+        this.network.transmit(STATUS_BUILDING);
+      }
       return this.buildUnit(unit, dX, dY);
     }
     return null;
   }
 
   harvest() {
-    this.network.transmit(STATUS_MINING);
+    if (this.me.unit !== SPECS.CASTLE) {
+      this.network.transmit(STATUS_MINING);
+    }
     return this.mine();
   }
 
   shoot(dX, dY) {
-    this.network.transmit(STATUS_ATTACKING);
+    if (this.me.unit !== SPECS.CASTLE) {
+      this.network.transmit(STATUS_ATTACKING);
+    }
     return this.attack(dX, dY);
   }
 
@@ -1851,6 +2016,10 @@ class MyRobot extends BCAbstractRobot {
     this.tactician.update(this.getVisibleRobots(), this.getVisibleRobotMap());
     this.network.update();
 
+
+
+
+
     if (this.myType === undefined) {
       switch (this.me.unit) {
         case SPECS.PROPHET:
@@ -1870,7 +2039,8 @@ class MyRobot extends BCAbstractRobot {
           this.speed = CRUSADER_MOVE_SPEED;
           break;
         case SPECS.CHURCH:
-          return null;
+          this.myType = church;
+          break;
         default:
           this.log("Unknown unit type " + this.me.unit);
       }

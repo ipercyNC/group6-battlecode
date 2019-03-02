@@ -15,6 +15,27 @@ pilgrim.takeTurn = (self) => {
   self.atlas.saveParentBase();
   self.atlas.updateResourceMap();
 
+  // check if we should build a base
+  if (self.atlas.tileIsKarbonite(self.me.x, self.me.y) || self.atlas.tileIsFuel(self.me.x, self.me.y)) {
+    if (self.buildBaseLocation === null && self.atlas.getBaseWithinRange(6) === null) {
+      self.buildBaseLocation = self.atlas.getOptimalBaseLocation(self.me.x, self.me.y);
+    }
+  }
+
+  if (self.buildBaseLocation !== null) {
+    if (!self.moving) {
+      self.atlas.calculatePathAdjacentToTarget(self.buildBaseLocation.x, self.buildBaseLocation.y);
+    }
+
+    if (self.moving) {
+      return self.atlas.continueMovement();
+    }
+    const dX = self.buildBaseLocation.x - self.me.x;
+    const dY = self.buildBaseLocation.y - self.me.y;
+    self.buildBaseLocation = null;
+    return self.construct(SPECS.CHURCH, dX, dY);
+  }
+
   // mine resource if carrying space and on a relevant tile
   if (self.atlas.tileIsKarbonite(self.me.x, self.me.y) && self.me.karbonite < Constants.PILGRIM_KARBONITE_CAPACITY) {
     // // self.log("Mine karb");
@@ -64,26 +85,6 @@ pilgrim.takeTurn = (self) => {
 
     self.infant = true;
     return self.give(dX, dY, self.me.karbonite, self.me.fuel);
-  }
-
-
-  // before going home see if we should build a base for this resource tile
-  if (self.buildBaseLocation === null && self.atlas.getBaseWithinRange(6) === null) {
-    self.buildBaseLocation = self.atlas.getOptimalBaseLocation(self.me.x, self.me.y);
-  }
-
-  if (self.buildBaseLocation !== null) {
-    if (!self.moving) {
-      self.atlas.calculatePathAdjacentToTarget(self.buildBaseLocation.x, self.buildBaseLocation.y);
-    }
-
-    if (self.moving) {
-      return self.atlas.continueMovement();
-    }
-    const dX = self.buildBaseLocation.x - self.me.x;
-    const dY = self.buildBaseLocation.y - self.me.y;
-    self.buildBaseLocation = null;
-    return self.construct(SPECS.CHURCH, dX, dY);
   }
 
   // go back home

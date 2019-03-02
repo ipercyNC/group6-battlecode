@@ -39,6 +39,23 @@ export default class Network {
     return null;
   }
 
+  getCastles(step, castles) {
+    const transmitX = Math.floor(this.owner.me.x / (this.owner.map.length / 4));
+    const transmitY = Math.floor(this.owner.me.y / (this.owner.map.length / 4));
+    this.transmit(transmitX * 4 + transmitY);
+
+    let index = 0;
+    for (let i = 0; i < this.units[SPECS.CASTLE].length; i++) {
+      const data = this.units[SPECS.CASTLE][i];
+      const x = Math.round(Math.floor(data / 4) * (this.owner.map.length / 4) + (this.owner.map.length / 8));
+      const y = Math.round(data % 4 * (this.owner.map.length / 4) + (this.owner.map.length / 8));
+
+      if (castles[index] === undefined) {
+        castles.push({ x, y });
+        index++;
+      }
+    }
+  }
 
   countRobots() {
     this.units = [];

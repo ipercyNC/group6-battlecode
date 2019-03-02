@@ -40,6 +40,24 @@ export default class Tactician {
     this.target = target;
   }
 
+  getNumVisiblePilgrims() {
+    return this.robots.filter((robot) => {
+      if (this.team === robot.team && robot.unit === SPECS.PILGRIM && robot.x !== undefined) {
+        return true;
+      }
+      return false;
+    }).length;
+  }
+
+  getNumVisibleProphets() {
+    return this.robots.filter((robot) => {
+      if (this.team === robot.team && robot.unit === SPECS.PROPHET) {
+        return true;
+      }
+      return false;
+    }).length;
+  }
+
   getNearbyEnemies() {
     // get all robots within range
     return this.robots.filter((robot) => {
