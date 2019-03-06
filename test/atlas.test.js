@@ -1,14 +1,28 @@
 import Atlas from "../bots/atlas.js";
 import * as Constants from "../bots/constants.js";
-
+import * as SPECS from "../bots/specs.js";
+import transmit from "../bots/network.js";
 const makeAtlas = () => {
   const map =  null;
   const fuel = null;
   const karb = null;
-  const robot = null; 
+  const robot = {'path':null,
+	         'team':1,
+	         'castle_talk':0,
+	         'me':{'unit':2},
+	         getRobot(x){
+                   return x;
+		 },
+	         log(x){
+	           this.path=x;
+		 },
+	         castleTalk(x){
+                     this.castle_talk=x;
+		 }
+	      }; 
 
   
-  return new Atlas(map, fuel, karb, robot);
+  return new Atlas(robot);
 };
 const makeKarbMap = () => {
   return [
@@ -91,10 +105,16 @@ describe("class Atlas", () => {
       atlas.map=makeMap();
       const ret = atlas._coordIsValid(2,2);
       expect(ret).toEqual(true);
-      const ret2 = atlas._coordIsValid(100,100);
-      expect(ret2).toEqual(false);
-      const ret3 = atlas._coordIsValid(-1,-1);
-      expect(ret3).toEqual(false);
+    });
+    it("should return not valid", () =>{
+      const atlas = makeAtlas();
+      atlas.map = makeMap();
+      const ret = atlas._coordIsValid(100,100); expect(ret).toEqual(false); });
+    it("should return not valid", () =>{
+      const atlas = makeAtlas();
+      atlas.map = makeMap();
+      const ret = atlas._coordIsValid(-1,-1);
+      expect(ret).toEqual(false);
     });
 
   });
@@ -106,8 +126,6 @@ describe("class Atlas", () => {
       atlas.fuelMap = makeFuelMap();
       atlas.initializeResources();
       expect(atlas.resourceMap[0][0]).not.toEqual(Constants.EMPTY);
-
-
     });
   });
   describe("function updateResourceMap()",() => {
@@ -194,6 +212,47 @@ describe("class Atlas", () => {
     });
   });
 
+  describe("function getRobot()", () =>{
+    it("testing returning robot", () =>{
+      const atlas = makeAtlas();
+      const ret = atlas.getRobot(333);
+      expect(ret).toEqual(333);
+    });
+  });
+  describe("testing astar", () =>{
+    it("testing function for init()", () =>{
+      const atlas = makeAtlas();
+      setupBasics(atlas);
+      atlas.robotMap = makeRobotMap();
+      const ret =atlas.init(atlas.map);
+      expect(ret[0][0].blocked).toEqual(true);
+    });
+  });
+  describe("testing log", () =>{
+    it("testing robot log", () =>{
+      const atlas = makeAtlas();
+      atlas.path = [{'x':1,'y':1},{'x':4,'y':4}];
+      const ret = atlas.logPath();
+      expect(atlas.owner.path).toEqual("[1 1]->[4 4]");
 
+    });
+    it("testing robot log null", () =>{
+    const atlas = makeAtlas();
+      const ret =atlas.logPath();
+      expect(atlas.owner.path).toEqual("null");
+
+    });
+
+  });
+  describe("function saveParentBase()", () =>{
+   it("testing saveParentBase()", () =>{
+    const atlas = makeAtlas();
+    setupBasics(atlas);  
+    atlas.team =1;
+    atlas.robots = [{'team':1,'unit':0}];
+    atlas.saveParentBase();
+    expect(atlas.base.unit).toEqual(0);
+   });
+  });
 
 });
