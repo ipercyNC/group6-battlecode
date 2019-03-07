@@ -60,7 +60,8 @@ prophet.takeTurn = (self) => {
         if (newLoc.x === self.prevMove.x && newLoc.y === self.prevMove.y) {
             self.trapped++;
         }
-        if (self.trapped > 3) {
+        if (self.trapped > 20) {
+            self.trapped = 10;
             return self.move(0,0);
         }
         return self.move(dir.x,dir.y);
@@ -77,7 +78,19 @@ prophet.takeTurn = (self) => {
             // if visible enemy castles in attackable range, then attack it
             if (navigation.attackable(self.me, self.enemyCastles[i])) {
                 self.log("Attacking Castle");
-                return self.attack(self.enemyCastles[i].x - self.me.x, self.enemyCastles[i].y - self.me.y);
+                const e_castles = bots.filter((r) => {
+                    if (r.unit === SPECS.CASTLE
+                        && r.team !== self.me.team) {
+                            return true;
+                        }
+                        return false;
+                    });
+                if (e_castles.length > 0) {
+                    return self.attack(self.enemyCastles[i].x - self.me.x, self.enemyCastles[i].y - self.me.y);
+                }
+                else {
+                    self.enemyCastles.splice(i,1);
+                }
             }
             // otherwise, look for the closest one
             const newDist = navigation.Distance(self.me, e_castle);
@@ -93,7 +106,8 @@ prophet.takeTurn = (self) => {
         if (newLoc.x === self.prevMove.x && newLoc.y === self.prevMove.y) {
             self.trapped++;
         }
-        if (self.trapped > 3) {
+        if (self.trapped > 20) {
+            self.trapped = 10;
             return self.move(0,0);
         }
         return self.move(dir.x, dir.y);
@@ -103,34 +117,47 @@ prophet.takeTurn = (self) => {
         let vertical = true;
         let x_sum = 0;
         let y_sum = 0;
+        self.log(o_castles.length);
         if (o_castles.length > 1) {
+
             for (let i = 0; i < o_castles.length-1; i++) {
                 const o_castle1 = o_castles[i];
                 const o_castle2 = o_castles[i+1];
                 x_sum = x_sum + Math.abs(o_castle1.x - o_castle2.x);
                 y_sum = y_sum + Math.abs(o_castle1.y - o_castle2.y);
             }
-        }
 
-        if (x_sum > y_sum) {
-            vertical = false;
-        }
+            if (x_sum > y_sum) {
+                vertical = false;
+            }
 
-        if (vertical) {
-            for (let i =0; i < o_castles.length; i++) {
-                const castle = {x : self.getPassableMap().length - o_castles[i].x - 1, y: o_castles[i].y};
-                // self.log(castle.x);
-                // self.log(castle.y);
-                self.enemyCastles.push(castle);
+            if (vertical) {
+                for (let i =0; i < o_castles.length; i++) {
+                    const castle = {x : self.getPassableMap().length - o_castles[i].x - 1, y: o_castles[i].y};
+                    // self.log(castle.x);
+                    // self.log(castle.y);
+                    self.enemyCastles.push(castle);
+                }
+            } else {
+                for (let i =0; i < o_castles.length; i++) {
+                    const castle = {x : o_castles[i].x, y: self.getPassableMap().length - o_castles[i].y - 1 };
+                    // self.log(castle.x);
+                    // self.log(castle.y);
+                    self.enemyCastles.push(castle);
+                }
             }
         } else {
             for (let i =0; i < o_castles.length; i++) {
-                const castle = {x : o_castles[i].x, y: self.getPassableMap().length - o_castles[i].y - 1 };
+                const castle1 = {x : self.getPassableMap().length - o_castles[i].x - 1, y: o_castles[i].y};
+                const castle2 = {x : o_castles[i].x, y: self.getPassableMap().length - o_castles[i].y - 1 };
                 // self.log(castle.x);
                 // self.log(castle.y);
-                self.enemyCastles.push(castle);
+                self.enemyCastles.push(castle1)
+                self.enemyCastles.push(castle2);
             }
         }
+
+
         var e_castle = self.enemyCastles[0];
         var dist = 999999;
         for (let i = 0; i < self.enemyCastles.length; i++) {
@@ -169,7 +196,8 @@ prophet.takeTurn = (self) => {
         if (newLoc.x === self.prevMove.x && newLoc.y === self.prevMove.y) {
             self.trapped++;
         }
-        if (self.trapped > 3) {
+        if (self.trapped > 20) {
+            self.trapped = 10;
             return self.move(0,0);
         }
         return self.move(dir.x, dir.y);
