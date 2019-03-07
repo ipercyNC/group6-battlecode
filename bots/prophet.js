@@ -67,8 +67,22 @@ prophet.takeTurn = (self) => {
         return self.move(dir.x,dir.y);
     }
 
+    const o_prophet = bots.filter((r) => {
+        if (r.unit === SPECS.PROPHET && r.team === self.me.team) {
+            return true;
+        }
+        return false;
+    });
 
-
+    if (o_prophet.length > 3) {
+        self.wait = false;
+    };
+    if (self.wait) {
+        let options_ = navigation.buildable.filter((d) => {
+          return navigation.isPassable(navigation.applyDir(ourRobot, d), fullMap, robotMap);
+        });
+        return self.move(options_[0].x, options_[0].y);
+    };
     /////////////////// CASTLE
     // calculating enemy castles
     if (self.enemyCastles.length > 0 ) {

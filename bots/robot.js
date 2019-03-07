@@ -20,10 +20,13 @@ class MyRobot extends BCAbstractRobot {
     this.resourceTiles = [];
     this.forbiddenResourceTiles = [];
 
+
     // prophet
     this.porcDestination = [-1, -1];
     this.inTransit = true;
-    this.direction = "Up";
+    this.wait = true;
+    this.prevMove = {x:0, y: 0};
+    this.trapped = 0;
 
     // castle
     this.step = 0;
@@ -41,6 +44,16 @@ class MyRobot extends BCAbstractRobot {
     this.myType = undefined;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
+  }
+
+  check(array, element) {
+    for (let i = 0; i < array.length; i++) {
+      const tmp = array[i];
+      if (tmp.x == element.x && tmp.y == element.y) {
+        return true;
+      }
+    }
+    return false;
   }
 
   turn() {
