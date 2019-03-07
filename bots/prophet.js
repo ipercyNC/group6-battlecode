@@ -79,7 +79,7 @@ prophet.takeTurn = (self) => {
     };
     if (self.wait) {
         let options_ = navigation.buildable.filter((d) => {
-          return navigation.isPassable(navigation.applyDir(ourRobot, d), fullMap, robotMap);
+          return navigation.isPassable(navigation.applyDir(self.me, d), self.getPassableMap(), self.getVisibleRobotMap());
         });
         return self.move(options_[0].x, options_[0].y);
     };
