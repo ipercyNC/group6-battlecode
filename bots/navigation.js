@@ -44,30 +44,30 @@ navigation.buildable = [
   { x: -1, y: 0 },
   { x: 0, y: 1 },
   { x: 1, y: 1 },
-  { x: -1, y: 1 }
-];
-navigation.goUp = [
-  { x: 0, y: 1 },
-  { x: 1, y: 1 },
   { x: -1, y: 1 },
-  { x: -1, y: 0 },
-    { x: 1, y: 0 },
-  { x: 0, y: -1 },
-  { x: 1, y: -1 },
-  { x: -1, y: -1 },
-
+  { x: 0, y : 0}
 ];
-navigation.goDown = [
-  { x: 0, y: -1 },
-  { x: 1, y: -1 },
-  { x: -1, y: -1 },
-  { x: 1, y: 0 },
-  { x: -1, y: 0 },
-  { x: 0, y: 1 },
-  { x: 1, y: 1 },
-  { x: -1, y: 1 },
-
-];
+// navigation.goUp = [
+//   { x: 0, y: 1 },
+//   { x: 1, y: 1 },
+//   { x: -1, y: 1 },
+//   { x: -1, y: 0 },
+//     { x: 1, y: 0 },
+//   { x: 0, y: -1 },
+//   { x: 1, y: -1 },
+//   { x: -1, y: -1 },
+//
+// ];
+// navigation.goDown = [
+//   { x: 0, y: -1 },
+//   { x: 1, y: -1 },
+//   { x: -1, y: -1 },
+//   { x: 1, y: 0 },
+//   { x: -1, y: 0 },
+//   { x: 0, y: 1 },
+//   { x: 1, y: 1 },
+//   { x: -1, y: 1 },
+// ];
 // get new dir
 navigation.applyDir = (loc, dir) => {
   return { x: loc.x + dir.x, y: loc.y + dir.y };
@@ -88,15 +88,13 @@ navigation.getToBorder = (robot) => {
 
 // move our robot closer to target with in steps, return x_step and y_step
 navigation.moveToTarget = (ourRobot, target, fullMap, robotMap) => {
-  const ourRobot_loc = { x: ourRobot.x, y: ourRobot.y };
-  const target_loc = { x: target.x, y: target.y };
-
   // get all options can move to target
   let options = navigation.buildable.filter((d) => {
     return navigation.isPassable(navigation.applyDir(ourRobot, d), fullMap, robotMap);
   });
+
   if (options.length > 0) {
-    let dist = 100000;
+    let dist = 10000000;
     let dir = options[0];
     // get the closest loction between target and ourRobot
     for (let i = 0; i < options.length; i++) {
