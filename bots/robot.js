@@ -3,6 +3,7 @@ import prophet from "./prophet.js";
 import castle from "./castle.js";
 import pilgrim from "./pilgrim.js";
 import crusader from "./crusader.js";
+import church from "./church.js";
 import * as Constants from "./constants.js";
 import BinaryHeap from "./binaryHeap.js";
 import Atlas from "./atlas.js";
@@ -51,6 +52,9 @@ class MyRobot extends BCAbstractRobot {
     this.nResources = 0;
     this.turnsToSkip = 0;
     this.rank = null;
+    this.enemyCastles = [];
+    this.castles = [];
+    this.nCastles = 0;
 
     this.robots = [];
     this.broadcasted = false;
@@ -66,10 +70,10 @@ class MyRobot extends BCAbstractRobot {
     ];
 
     this.pendingRecievedMessages = {};
-    this.enemyCastles = [];
     this.myType = undefined;
     this.pilgrimsBuilt = 0;
     this.speed = -1;
+    this.frontier = false;
   }
 
   construct(unit, dX, dY) {
@@ -82,26 +86,34 @@ class MyRobot extends BCAbstractRobot {
         this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE &&
         this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL
       ) {
-        this.network.transmit(Constants.STATUS_BUILDING);
+        if (this.me.unit !== SPECS.CASTLE) {
+          this.network.transmit(Constants.STATUS_BUILDING);
+        }
         return this.buildUnit(unit, dX, dY);
       }
     } else if (
       this.karbonite >= SPECS.UNITS[unit].CONSTRUCTION_KARBONITE + 50 &&
       this.fuel >= SPECS.UNITS[unit].CONSTRUCTION_FUEL + 200
     ) {
-      this.network.transmit(Constants.STATUS_BUILDING);
+      if (this.me.unit !== SPECS.CASTLE) {
+        this.network.transmit(Constants.STATUS_BUILDING);
+      }
       return this.buildUnit(unit, dX, dY);
     }
     return null;
   }
 
   harvest() {
-    this.network.transmit(Constants.STATUS_MINING);
+    if (this.me.unit !== SPECS.CASTLE) {
+      this.network.transmit(Constants.STATUS_MINING);
+    }
     return this.mine();
   }
 
   shoot(dX, dY) {
-    this.network.transmit(Constants.STATUS_ATTACKING);
+    if (this.me.unit !== SPECS.CASTLE) {
+      this.network.transmit(Constants.STATUS_ATTACKING);
+    }
     return this.attack(dX, dY);
   }
 
@@ -124,6 +136,10 @@ class MyRobot extends BCAbstractRobot {
     this.tactician.update(this.getVisibleRobots(), this.getVisibleRobotMap());
     this.network.update();
 
+
+
+
+
     if (this.myType === undefined) {
       switch (this.me.unit) {
         case SPECS.PROPHET:
@@ -143,7 +159,8 @@ class MyRobot extends BCAbstractRobot {
           this.speed = Constants.CRUSADER_MOVE_SPEED;
           break;
         case SPECS.CHURCH:
-          return null;
+          this.myType = church;
+          break;
         default:
           this.log("Unknown unit type " + this.me.unit);
       }

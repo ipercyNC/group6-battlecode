@@ -24,6 +24,7 @@ export default class Atlas {
 
     this.stationary = false;
     this.porcDestination = null;
+    this.stashDestination = null;
     this.pos = null;
 
     this.nResources = -1;
@@ -116,6 +117,21 @@ export default class Atlas {
       }
     }
     return this.nResources;
+  }
+
+  getNumNearbyResources() {
+    let nResources = 0;
+    const MAX_RANGE = 5;
+    for (let y = this.pos.y - MAX_RANGE; y < this.pos.y + MAX_RANGE; y++) {
+      for (let x = this.pos.x - MAX_RANGE; x < this.pos.x + MAX_RANGE; x++) {
+        if (this._coordIsValid(x, y)) {
+          if (this.karbMap[y][x] || this.fuelMap[y][x]) {
+            nResources++;
+          }
+        }
+      }
+    }
+    return nResources;
   }
 
   getBaseWithinRange(range) {
@@ -653,8 +669,22 @@ export default class Atlas {
             (!this.map[y][x]) // can't build on a wall
           ) {
             row.push(99999);
-          } else {
-            row.push((x - cX) ** 2 + (y - cY) ** 2);
+          } else if (this.mapIsHorizontallyMirrored()) {
+            if (x < this.map.length * 0.25) {
+              row.push(99999);
+            } else if (x > this.map.length * 0.75) {
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          } else if (!this.mapIsHorizontallyMirrored()) {
+            if (y < this.map.length * 0.25) {
+              row.push(99999);
+            } else if (y > this.map.length * 0.75) {
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
           }
         } else {
           row.push(99999);
@@ -678,6 +708,63 @@ export default class Atlas {
     return [bX, bY];
   }
 
+  getStashDestination() {
+    const cX = this.pos.x; // center x
+    const cY = this.pos.y; // center y
+
+    const GRID_SPACE = 1;
+
+    // create a map of distances from our castle to available porc tiles
+    const botMap = this.robotMap;
+    const porcMap = [];
+    for (let y = 0; y < botMap.length; y++) {
+      const row = [];
+      let offset = 0;
+      if (y % 2 === 0) {
+        offset = 1;
+      }
+      for (let x = 0; x < botMap[y].length; x++) {
+        if ((x - offset) % (GRID_SPACE + 1) === 0) {
+          if ((this.tileIsPorced(x, y)) || // can't build porc if there's already porc there
+            (this.karbMap[y][x]) || // don't build on karb
+            (this.fuelMap[y][x]) || // or fuel
+            (!this.map[y][x]) // can't build on a wall
+          ) {
+            row.push(99999);
+          } else if (this.mapIsHorizontallyMirrored()) {
+            if (x > this.map.length * 0.25 && x < this.map.length * 0.75) { // stash only on the far left or far right x axis
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          } else if (!this.mapIsHorizontallyMirrored()) {
+            if (y > this.map.length * 0.25 && y < this.map.length * 0.75) { // stash only on the far top or far bottom y axis
+              row.push(99999);
+            } else {
+              row.push((x - cX) ** 2 + (y - cY) ** 2);
+            }
+          }
+        } else {
+          row.push(99999);
+        }
+      }
+      porcMap.push(row);
+    }
+
+    // pick the closest open tile
+    let bX = 0;
+    let bY = 0;
+    for (let y = 0; y < porcMap.length; y++) {
+      for (let x = 0; x < porcMap[y].length; x++) {
+        if (porcMap[y][x] < porcMap[bY][bX]) {
+          bX = x;
+          bY = y;
+        }
+      }
+    }
+
+    return [bX, bY];
+  }
 
   tileIsPorced(x, y) {
     // don't porc next to bases cuz they'll get walled in
@@ -689,7 +776,7 @@ export default class Atlas {
     const botMap = this.robotMap;
     if (botMap[y][x] > 0) {
       const bot = this.getRobot(botMap[y][x]).unit;
-      if (bot === SPECS.CRUSADER || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
+      if (bot === SPECS.CRUSADER || bot === SPECS.PROPHET || bot === SPECS.CASTLE || bot === SPECS.CHURCH) {
         return true;
       }
     }
@@ -720,6 +807,35 @@ export default class Atlas {
         }
         if (this.porcDestination[0] !== -1 && this.porcDestination[1] !== -1) {
           this.calculatePathToTarget(this.porcDestination[0], this.porcDestination[1]);
+          return this.continueMovement();
+        }
+      }
+    }
+    return null;
+  }
+
+  moveToStashGrid() {
+    if (!this.stationary) {
+      if (this.stashDestination === null) {
+        this.stashDestination = this.getStashDestination();
+      }
+      if (this.stashDestination[0] !== -1 && this.stashDestination[1] !== -1) {
+        // if we're at our dest then stop moving
+        // if someone got there first then pick a new dest
+        if (this.robotMap[this.stashDestination[1]][this.stashDestination[0]] > 0) {
+          if (this.pos.x === this.stashDestination[0] && this.pos.y === this.stashDestination[1]) {
+            this.stationary = true;
+          } else if (this.tileIsPorced(this.stashDestination[0], this.stashDestination[1])) {
+            this.stashDestination = this.getStashDestination();
+            this.moving = false;
+          }
+        }
+
+        if (this.moving) {
+          return this.continueMovement();
+        }
+        if (this.stashDestination[0] !== -1 && this.stashDestination[1] !== -1) {
+          this.calculatePathToTarget(this.stashDestination[0], this.stashDestination[1]);
           return this.continueMovement();
         }
       }
