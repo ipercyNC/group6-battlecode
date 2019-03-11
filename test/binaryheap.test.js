@@ -35,8 +35,28 @@ describe("class BinaryHeap", () => {
   });
   describe("function pop", () =>{
     it("should pop item on heap", () =>{
-
+      const heap = makeHeap();
+      heap.push(1);
+      console.log(heap.size());
+      expect(heap.size()).toEqual(1);
+      heap.pop(1);
+      console.log(heap.size());
+      expect(heap.size()).toEqual(0);
     });
+  });
+  describe("function bubbleUp()", () =>{
+    it("should properly bubbleup", () =>{
+      const heap = makeHeap();
+      heap.push(1);
+      console.log(heap.content);
+      heap.push(2); 
+      console.log(heap.content);
+      heap.bubbleUp(2);
+      console.log(heap.content);
+      expect(heap.content[1]).toEqual(2);
+    
+    });
+
   });
 
 });
