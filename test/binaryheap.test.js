@@ -58,5 +58,34 @@ describe("class BinaryHeap", () => {
     });
 
   });
+  describe("function sinkDown()", () =>{
+    it("should properly sink item down", () =>{
+      const heap = makeHeap();
+      heap.push(1);
+      console.log(heap.content);
+      heap.push(2);
+      heap.push(3);
+      console.log(heap.content);
+      heap.sinkDown(2);
+      console.log(heap.content);
+    });
+  });
+  describe("function remove()", () =>{
+    it("should properly remove item", () =>{
+      const heap = makeHeap();
+      heap.push(1);
+      heap.push(2);
+      console.log(heap.content);
+      heap.remove(1); 
+      expect(heap.size()).toEqual(1);
+      heap.remove(2);
+      expect(heap.size()).toEqual(0);
+    });
+    it("should fail silently for empty", () =>{
+       const heap = makeHeap();
+       heap.remove(4);
+       expect(heap.size()).toEqual(0);
+    });
+  });
 
 });
