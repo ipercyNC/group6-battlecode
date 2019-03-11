@@ -67,6 +67,14 @@ const makeRobotMap = () => {
 	  [0,0,0,0,0]
   ];
 };
+const makeMap2 = () => {
+   [ [1,1],
+     [1,1] ];
+};
+const makeRobotMap2 = () => {
+   return [ [{'unit':0},{}],
+	   [{},{}]];
+};
 function setupBasics(atlas){
   atlas.map = makeMap();
   atlas.karbMap = makeKarbMap(); 
@@ -139,9 +147,7 @@ describe("class Atlas", () => {
     });
   });
   describe("functions to tileIsFuel and tileIsKarbonite",() => {
-    it("testing tileIsFuel()", () => {
-      const atlas = makeAtlas();
-      setupBasics(atlas);
+    it("testing tileIsFuel()", () => { const atlas = makeAtlas(); setupBasics(atlas);
       expect(atlas.resourceMap[0][0]).toEqual(Constants.FUEL);
     });
     it("testing tileIsKarbonite()", () => {
@@ -253,6 +259,14 @@ describe("class Atlas", () => {
     atlas.saveParentBase();
     expect(atlas.base.unit).toEqual(0);
    });
+  });
+  describe("function getBaseWithinRange()",() => {
+    it("test for base in range", () =>{
+      const atlas = makeAtlas();
+      atlas.map =makeMap2();
+      atlas.robotMap = makeRobotMap();
+      console.log(atlas.getBaseWithinRange(4));
+    });
   });
 
 });
