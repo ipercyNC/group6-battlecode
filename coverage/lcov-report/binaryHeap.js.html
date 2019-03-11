@@ -20,9 +20,9 @@
     </h1>
     <div class='clearfix'>
       <div class='fl pad1y space-right2'>
-        <span class="strong">1.79% </span>
+        <span class="strong">16.07% </span>
         <span class="quiet">Statements</span>
-        <span class='fraction'>1/56</span>
+        <span class='fraction'>9/56</span>
       </div>
       <div class='fl pad1y space-right2'>
         <span class="strong">0% </span>
@@ -30,14 +30,14 @@
         <span class='fraction'>0/20</span>
       </div>
       <div class='fl pad1y space-right2'>
-        <span class="strong">0% </span>
+        <span class="strong">57.14% </span>
         <span class="quiet">Functions</span>
-        <span class='fraction'>0/7</span>
+        <span class='fraction'>4/7</span>
       </div>
       <div class='fl pad1y space-right2'>
-        <span class="strong">1.92% </span>
+        <span class="strong">17.31% </span>
         <span class="quiet">Lines</span>
-        <span class='fraction'>1/52</span>
+        <span class='fraction'>9/52</span>
       </div>
     </div>
     <p class="quiet">
@@ -161,16 +161,16 @@
 <a name='L113'></a><a href='#L113'>113</a>
 <a name='L114'></a><a href='#L114'>114</a>
 <a name='L115'></a><a href='#L115'>115</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -209,15 +209,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -274,17 +274,17 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export default function <span class="fstat-no" title="function not covered" >BinaryHeap(</span>scoreFunction) {
-<span class="cstat-no" title="statement not covered" >  this.content = [];</span>
-<span class="cstat-no" title="statement not covered" >  this.scoreFunction = scoreFunction;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export default function BinaryHeap(scoreFunction) {
+  this.content = [];
+  this.scoreFunction = scoreFunction;
 }
 &nbsp;
 BinaryHeap.prototype = {
-  push: <span class="fstat-no" title="function not covered" >fu</span>nction (element) {
+  push: function (element) {
     // Add the new element to the end of the array.
-<span class="cstat-no" title="statement not covered" >    this.content.push(element);</span>
+    this.content.push(element);
     // Allow it to bubble up.
-<span class="cstat-no" title="statement not covered" >    this.bubbleUp(this.content.length - 1);</span>
+    this.bubbleUp(this.content.length - 1);
   },
 &nbsp;
   pop: <span class="fstat-no" title="function not covered" >fu</span>nction () {
@@ -322,16 +322,16 @@ BinaryHeap.prototype = {
     }
   },
 &nbsp;
-  size: <span class="fstat-no" title="function not covered" >fu</span>nction () {
-<span class="cstat-no" title="statement not covered" >    return this.content.length;</span>
+  size: function () {
+    return this.content.length;
   },
 &nbsp;
-  bubbleUp: <span class="fstat-no" title="function not covered" >fu</span>nction (n) {
+  bubbleUp: function (n) {
     // Fetch the element that has to be moved.
-    var element = <span class="cstat-no" title="statement not covered" >this.content[n],</span>
-      score = <span class="cstat-no" title="statement not covered" >this.scoreFunction(element);</span>
+    var element = this.content[n],
+      score = this.scoreFunction(element);
     // When at 0, an element can not go up any further.
-<span class="cstat-no" title="statement not covered" >    while (n &gt; 0) {</span>
+    while (n &gt; 0) {
       // Compute the parent element's index, and fetch it.
       var parentN = <span class="cstat-no" title="statement not covered" >Math.floor((n + 1) / 2) - 1,</span>
         parent = <span class="cstat-no" title="statement not covered" >this.content[parentN];</span>
@@ -394,7 +394,7 @@ BinaryHeap.prototype = {
 </div><!-- /wrapper -->
 <div class='footer quiet pad2 space-top1 center small'>
   Code coverage
-  generated by <a href="https://istanbul.js.org/" target="_blank">istanbul</a> at Thu Feb 21 2019 12:18:52 GMT-0800 (PST)
+  generated by <a href="https://istanbul.js.org/" target="_blank">istanbul</a> at Mon Mar 11 2019 15:36:36 GMT-0700 (PDT)
 </div>
 </div>
 <script src="prettify.js"></script>
